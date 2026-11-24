@@ -279,7 +279,20 @@ Not adopted. Script: `spikes/needle_single_field.py`.
 - The soft timeout cannot stop a hung Cactus call.
 - Windows hidden-file skipping was only tested by a unit test setting the hidden attribute; junction skipping is untested.
 - Tests do not exercise real PDFs with text or 44.1 kHz WAVs (the real run covered a text PDF and a 16 kHz WAV).
-- Pytest count was run once after the last commit: 29 passed.
+- Pytest count was run once after the last code commit: 29 passed (see [Commands and output](#commands-and-output)).
+
+Open items from the code reviews. They stay open on purpose; the owner decides on them. Code was not changed in this fix.
+
+- N2: a `/scan` request that is rejected with 409 still overwrites `app_meta.scan_root` (`main.py`, the write comes before `jobs.start_scan`). Snapshot relative paths then use the wrong root until the next scan.
+- N3: if a folder cannot be listed (or a file cannot be stat-ed) during a scan, its rows are treated as missing and deleted from the DB. Disk is untouched and a rescan restores them, but the index shrinks silently.
+- N5: only an `ImportError` from Whistle is cached; any other load error (`RuntimeError`) is retried for every audio file.
+- N6: `/search` reranks up to 50 FTS hits plus up to 200 recent files in one GLiClass call while holding the model lock. That can take tens of seconds, blocks a running scan, and can push `/search` into the BM25 fallback.
+- N7 (half fixed): the `/reveal` argument form (`/select,` and the path as separate args) was checked once by hand on a path with a space and an apostrophe, but `test_api.py` only asserts `args[0][0] == "explorer"`, not the second and third items.
+- N8: each request thread keeps its own SQLite connection open (WAL handles) until the process ends. Bounded by the thread pool size.
+- N9: files with the reparse-point attribute are skipped silently, including OneDrive cloud placeholders; there is no `errors` entry and no skip count.
+- N10: `/health` has a dead clause (`"whistle" in loaded` is already covered), and `cactus_files_present` does not check the Cactus engine DLL, so `files_present` can be true while the first run still needs the engine download.
+- N11: the `_ONLY_NUM_DATE` regex in `extractors.py` contains a stray literal `?` (probably a mangled currency sign), so a line made only of digits and `?` is dropped as "number only".
+- N12: test gaps: no test for text PDF extraction, the 25 MB boundary (only `MAX_FILE_MB=0`), summary sentence choice, the 6-keyword cap, or a custom folder pushing labels past 25 per call.
 
 ## Carried forward
 
