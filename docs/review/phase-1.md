@@ -260,6 +260,11 @@ backend\.venv\Scripts\python.exe spikes\needle_single_field.py 2>$null | Out-Str
 7. `soxr` installed cleanly (wheel) and is pinned, so non-16 kHz WAVs are handed to Whistle; WAVs that Whistle or the header reader reject take the fallback with an `ai_error`. Not exercised with a real 44.1 kHz file.
 8. `requirements-dev.txt` added; `httpx` is a dev dependency (the runtime pins only had `httpx2`).
 9. `POST /folders` returns 201 with `{folder_id, job_id, job: "started"|"queued"}`.
+10. Extra Origin check: any request with an `Origin` header outside the allowed list gets 403 (CORS alone only hides responses), plus `TrustedHostMiddleware` for `127.0.0.1` and `localhost` (bad `Host` gets 400). Not in the spec.
+11. `/scan/status` returns more than `{state, processed, total, current_file, errors}`: also `job_id`, `kind`, `stats` and `queued_job_id`.
+12. Two settings instead of one data path: `VEILFS_DATA_DIR` (model caches) and `VEILFS_DB_PATH` (the database), so tests and the real run use their own DB.
+13. The scanner skips every reparse point, junction and symlink (and hidden or system items), not only hidden/system dirs as the spec says.
+14. Size limits not in the spec: `/files?q=` and `/search?q=` at most 200 characters (422 above), `PATCH client-meta` `pii_types` and `topics` at most 40 items of at most 80 characters each, `redacted_excerpt` at most 5000, folder `name` 1-60, `description` 300, `emoji` 16, scan `root` 1024. Bodies reject extra fields (422).
 
 ## Needle single-field experiment (15 min, feedback note 2)
 
