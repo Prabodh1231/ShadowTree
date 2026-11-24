@@ -1,6 +1,6 @@
 import './styles.css';
 import { api, ApiError, API_BASE } from './api.js';
-import { startBrowserAI, suggestEmoji, runPrivacyPass, redactText, safeLabels } from './ai/browserAI.js';
+import { startBrowserAI, suggestEmoji, runPrivacyPass, redactText, safeLabels, browserAIOff } from './ai/browserAI.js';
 
 const $ = (id) => document.getElementById(id);
 const START_CMD = 'cd "<repo>\\backend"\n.\\.venv\\Scripts\\Activate.ps1\nuvicorn app.main:app --host 127.0.0.1 --port 8000';
@@ -192,7 +192,13 @@ const safeCache = new Map(); // key -> {title, keywords} | null
 const cardObjs = new Map();  // id -> latest card object, to redraw after the cache fills
 let safeQueue = Promise.resolve();
 function safeView(c) {
-  if (!hasPii(c)) return { title: c.title || c.name, keywords: c.keywords ?? [] };
+  const covered = !!c.client_meta?.sha256 && c.client_meta.sha256 === c.sha256;
+  if (!hasPii(c)) {
+    // Not yet checked while the browser AI is on or still working: hide, like a PII file.
+    const waiting = !covered && !browserAIOff() && !state.aiUnavailable;
+    if (!waiting) return { title: c.title || c.name, keywords: c.keywords ?? [] };
+    return { title: c.name, keywords: [], checking: true };
+  }
   const key = `${c.id}:${c.sha256}`;
   if (!safeCache.has(key)) {
     safeCache.set(key, null);
@@ -232,7 +238,8 @@ function cardEl(c) {
       h('div', { class: 'card-sub' }, h('span', { class: 'dot ' + status, title: statusText, 'aria-label': statusText }), h('span', { text: c.name }))),
     m != null && h('span', { class: 'match', text: m + '%', title: 'How well this matches your search' })),
   h('p', { class: 'card-summary', text: cardSummary(c) }),
-  (safe.keywords.length || topics.length) ? h('div', { class: 'tags' },
+  (safe.keywords.length || topics.length || safe.checking) ? h('div', { class: 'tags' },
+    safe.checking && h('span', { class: 'tag', text: 'checking…' }),
     topics.map((t) => h('span', { class: 'tag topic', text: t })),
     safe.keywords.slice(0, 5).map((k) => h('span', { class: 'tag', text: k }))) : null,
   (c.folders?.length || hasPii(c)) ? h('div', { class: 'chips' },
@@ -310,7 +317,7 @@ function renderDrawer(mode) {
     h('button', { type: 'button', 'aria-pressed': String(mode === 'original'), text: 'Original', onclick: () => renderDrawer('original') }));
   $('drawer').replaceChildren(...[
     closeBtn(),
-    h('h2', { id: 'drawer-title', text: (mode === 'redacted' && hasPii(f)) ? safeView(f).title : (f.title || f.name) }),
+    h('h2', { id: 'drawer-title', text: mode === 'redacted' ? safeView(cardObjs.get(f.id) ?? f).title : (f.title || f.name) }),
     h('div', { class: 'chips' }, hasPii(f) && h('span', { class: 'pii', text: '⚠ PII: ' + ((meta.pii_types ?? []).join(', ') || 'personal details') }),
       (f.folders ?? []).map((l) => h('span', { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(), pct(l.score) > 0 && h('b', { text: pct(l.score) + '%' })))),
     h('h3', { text: 'Summary' }),
@@ -451,7 +458,15 @@ async function startPrivacyPass() {
       onUpdate: (clientMeta, card) => {
         const id = card?.id;
         const cur = id != null ? cardById(id) : null;
-        if (cur) { cur.client_meta = clientMeta ?? card.client_meta ?? cur.client_meta; replaceCard(cur); }
+        const meta2 = clientMeta ?? card.client_meta;
+        // the search view may hold its own copy of the card
+        const copies = [cur, cardObjs.get(id), ...(state.search ? [...state.search.results, ...state.search.weak].filter((x) => x.id === id) : [])];
+        for (const x of new Set(copies.filter(Boolean))) x.client_meta = meta2 ?? x.client_meta;
+        if (cur) replaceCard(cardObjs.get(id) ?? cur);
+        if (drawerFile?.id === id) {
+          const el = $('drawer-title');
+          if (el && document.querySelector('.seg [aria-pressed="true"]')?.textContent === 'Redacted') el.textContent = safeView(cardObjs.get(id) ?? cur).title;
+        }
         clearTimeout(startPrivacyPass.t); startPrivacyPass.t = setTimeout(refreshFolders, 800);
       },
     });
@@ -460,6 +475,7 @@ async function startPrivacyPass() {
   if (r?.status === 'unavailable' && !state.aiUnavailable) {
     state.aiUnavailable = true;
     note('Privacy scan unavailable. Everything else works, but personal details will not be flagged.');
+    renderAll();
   }
   await refreshFolders();
 }

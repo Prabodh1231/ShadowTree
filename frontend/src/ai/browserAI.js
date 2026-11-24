@@ -72,6 +72,8 @@ export function startBrowserAI() {
   return starting;
 }
 
+export function browserAIOff() { return isOff(); }
+
 export async function suggestEmoji(name, description) {
   try {
     await startBrowserAI();
