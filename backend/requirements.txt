@@ -1,7 +1,6 @@
-# VeilFS backend dependencies, pinned from backend/.venv (Python 3.12, Windows x64).
-# Phase 0: AI stacks only (cactus-compute, gliclass and their dependencies).
-# torch is the CPU wheel from PyPI (2.15.0+cpu on Windows).
-
+﻿# VeilFS backend runtime dependencies, pinned from backend/.venv (Python 3.12, Windows x64).
+# Phase 1 adds fastapi, starlette, uvicorn, pypdf, soxr (16 kHz resampling for Whistle).
+# torch is the CPU wheel from PyPI (2.15.0+cpu on Windows). Test deps: requirements-dev.txt.
 annotated-doc==0.0.7
 annotated-types==0.8.0
 anyio==4.16.0
@@ -9,6 +8,7 @@ cactus-compute==4.2.7
 click==8.5.1
 cloudpickle==3.1.3
 colorama==0.4.6
+fastapi==0.165.0
 filelock==4.3.1
 fsspec==2026.9.0
 gliclass==0.1.22
@@ -27,11 +27,13 @@ mpmath==1.3.0
 narwhals==2.29.0
 networkx==3.7
 numpy==2.5.5
+opentelemetry-api==1.45.2
 packaging==26.4
 pillow==13.0.0
-pydantic==2.14.4
 pydantic_core==2.50.5
+pydantic==2.14.4
 Pygments==2.21.0
+pypdf==7.1.1
 PyYAML==6.0.4
 regex==2026.11.23
 rich==15.0.0
@@ -40,6 +42,8 @@ scikit-learn==1.9.1
 scipy==1.18.1
 setuptools==84.2.1
 shellingham==1.5.4
+soxr==1.1.0
+starlette==1.10.0
 sympy==1.14.0
 threadpoolctl==3.8.0
 tokenizers==0.23.3
@@ -48,5 +52,6 @@ tqdm==4.70.1
 transformers==5.24.1
 truststore==0.10.5
 typer==0.29.2
-typing-inspection==0.4.5
 typing_extensions==4.16.0
+typing-inspection==0.4.5
+uvicorn==0.54.0
