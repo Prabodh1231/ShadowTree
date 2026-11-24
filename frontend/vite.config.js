@@ -35,7 +35,9 @@ export default defineConfig({
     target: 'esnext',
     rollupOptions: {
       input: {
+        main: here('./index.html'),
         spike: here('./spikes/browser-spike.html'),
+        aicheck: here('./spikes/browser-ai-check.html'),
       },
     },
   },

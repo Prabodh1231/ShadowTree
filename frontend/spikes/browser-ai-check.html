@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VeilFS Phase 2 - browser AI check</title>
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 960px; }
+      h1 { font-size: 1.25rem; }
+      .step { border: 1px solid #ccc; border-radius: 8px; padding: .5rem 1rem; margin: .5rem 0; }
+      .ok { border-color: #2a9d55; }
+      .fail { border-color: #c0392b; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #f5f5f7; padding: .5rem; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>VeilFS Phase 2: browser AI check (src/ai/browserAI.js)</h1>
+    <p>Calls each exported function on fake text. Results land in <code>window.__spike</code>.
+       Add <code>?ai=off</code> to check the off switch, <code>?pass=1</code> to also run the privacy pass.</p>
+    <div id="out">Running...</div>
+    <script type="module">
+      import { startBrowserAI, suggestEmoji, analyzeFile, runPrivacyPass } from '../src/ai/browserAI.js';
+
+      const spike = (window.__spike = { done: false, env: {}, steps: [] });
+      const out = document.getElementById('out');
+      const FAKE = 'Invoice for Jane Doe, 12 Elm Street, Springfield. Contact billing@example.com or +1 555-0142. Total due: 120 USD for flights and hotel.';
+
+      async function step(name, fn, check) {
+        const t = performance.now();
+        let result, error;
+        try { result = await fn(); } catch (e) { error = String(e); }
+        const totalMs = Math.round(performance.now() - t);
+        const ok = !error && check(result);
+        spike.steps.push({ name, ok, totalMs, result, error });
+        const div = document.createElement('div');
+        div.className = 'step ' + (ok ? 'ok' : 'fail');
+        div.innerHTML = `<b>${ok ? 'OK' : 'FAIL'}</b> ${name} (${totalMs} ms)<pre></pre>`;
+        div.querySelector('pre').textContent = JSON.stringify(error ?? result, null, 2);
+        out.appendChild(div);
+      }
+
+      out.textContent = '';
+      spike.env = { href: location.href, ai: new URLSearchParams(location.search).get('ai') };
+      const off = spike.env.ai === 'off';
+
+      await step('startBrowserAI', startBrowserAI,
+        (r) => off ? !r.redact && !r.gist && !r.emo : r.redact && r.gist && r.emo);
+      await step('startBrowserAI again (cached)', startBrowserAI, (r) => typeof r.redact === 'boolean');
+      await step('suggestEmoji', () => suggestEmoji('Travel plans', 'flights, hotels and trips'),
+        (r) => off ? r === null : typeof r === 'string' && r.length > 0);
+      await step('analyzeFile', () => analyzeFile({ text_excerpt: FAKE, summary: 'An invoice for travel.' }),
+        (r) => off ? r === null : r && r.has_pii === true && r.pii_types.includes('EMAIL') && r.topics.length > 0);
+      await step('analyzeFile (empty text)', () => analyzeFile({ text_excerpt: '', summary: '' }),
+        (r) => r === null || r.has_pii === false);
+
+      if (new URLSearchParams(location.search).get('pass') === '1') {
+        const api = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8011';
+        await step('runPrivacyPass', async () => {
+          const list = await (await fetch(`${api}/files`)).json();
+          const cards = Array.isArray(list) ? list : (list.files ?? list.items ?? []);
+          const updates = [];
+          const res = await runPrivacyPass(cards, { apiBase: api, onUpdate: (m, c) => updates.push({ id: c.id, meta: m }) });
+          const again = await runPrivacyPass(
+            (await (await fetch(`${api}/files`)).json()).files ?? (await (await fetch(`${api}/files`)).json()),
+            { apiBase: api });
+          return { cards: cards.length, first: res, second: again, updates: updates.slice(0, 3) };
+        }, (r) => r.first.status === 'ok' && r.first.failed === 0 && r.first.done > 0 && r.second.done === 0);
+      }
+      spike.done = true;
+    </script>
+  </body>
+</html>
