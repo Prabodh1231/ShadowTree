@@ -167,6 +167,24 @@ function downState() {
 }
 async function retryConnect() { state.loading = true; renderAll(); await refresh(); if (!state.down) { await resumeIfRunning(); startAI(); } }
 
+// Card summaries of files flagged as PII use the same rule as the drawer's
+// Redacted view: browser-redacted text, or a short line. Cached per id + sha256.
+const cardSummaries = new Map(); // key -> string | null (null: tried, not available)
+function cardSummary(c) {
+  if (!c.summary) return 'No summary available.';
+  if (!hasPii(c)) return c.summary;
+  const key = `${c.id}:${c.sha256}`;
+  if (!cardSummaries.has(key)) {
+    cardSummaries.set(key, null);
+    redactText(c.summary).then((text) => {
+      if (text == null) return;
+      cardSummaries.set(key, text);
+      document.querySelectorAll(`[data-id="${c.id}"].card .card-summary`).forEach((p) => { p.textContent = text; });
+    });
+  }
+  return cardSummaries.get(key) ?? 'Summary hidden: personal data';
+}
+
 function cardEl(c) {
   const meta = c.client_meta ?? {};
   const topics = meta.topics ?? [];
@@ -181,7 +199,7 @@ function cardEl(c) {
       h('h3', { class: 'card-title', text: c.title || c.name }),
       h('div', { class: 'card-sub' }, h('span', { class: 'dot ' + status, title: statusText, 'aria-label': statusText }), h('span', { text: c.name }))),
     m != null && h('span', { class: 'match', text: m + '%', title: 'How well this matches your search' })),
-  h('p', { class: 'card-summary', text: c.summary || 'No summary available.' }),
+  h('p', { class: 'card-summary', text: cardSummary(c) }),
   (c.keywords?.length || topics.length) ? h('div', { class: 'tags' },
     topics.map((t) => h('span', { class: 'tag topic', text: t })),
     (c.keywords ?? []).slice(0, 5).map((k) => h('span', { class: 'tag', text: k }))) : null,

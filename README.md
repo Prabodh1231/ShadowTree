@@ -27,4 +27,4 @@ Nothing else: no cloud AI APIs, no analytics.
 
 **License version.** The npm packages `@desert-ant-labs/*@5.0.0` ship `LICENSE.md` v1.0 (a pointer to [license.desertant.com/1.0](https://license.desertant.com/1.0)), and the site is at v1.1 (30 October 2026). VeilFS relies on [v1.1](https://license.desertant.com/1.1.txt) because it describes the license check the 5.0.0 SDK makes, while [v1.0](https://license.desertant.com/1.0.txt) only describes usage "telemetry" that counts monthly active devices.
 
-**Credit.** A "Powered by Desert Ant Labs" credit linking to [desertant.com](https://desertant.com) lands in the app sidebar in Phase 2.
+**Credit.** A "Powered by Desert Ant Labs" credit linking to [desertant.com](https://desertant.com) is in the app sidebar footer now.
