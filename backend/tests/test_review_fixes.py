@@ -218,3 +218,33 @@ def test_n2_refused_scan_does_not_change_scan_root(client, sample_root, tmp_path
     assert row["value"] == str(sample_root.resolve())
     gate.set()
     assert jobs.wait_idle(60)
+
+
+# ---- L3 / L5: one-line ai_error, consistent with ai_status ---------------------------------
+
+def test_l3_ai_error_is_one_short_line(tmp_path, monkeypatch):
+    from app import ai_cactus
+    f = tmp_path / "invoice.txt"
+    f.write_text("Invoice INV-2041 from Northwind Supplies. Total due $960 by 15 December.", encoding="utf-8")
+
+    def boom(text):
+        raise RuntimeError("Cannot find the model files\n" + "huggingface says no " * 50)
+    monkeypatch.setattr(ai_cactus, "structured", boom)
+    card = ai_cactus.build_card(f, "text", f.name)
+    err = card["ai_error"]
+    assert card["ai_status"] == "fallback" and "\n" not in err and len(err) <= 200
+    assert "RuntimeError: Cannot find the model files" in err
+    assert err.endswith("keywords:freq") and "\u2026" in err and "title:fallback" in err   # suffix kept
+
+
+def test_l5_ok_status_has_only_provenance(tmp_path, monkeypatch):
+    from PIL import Image
+    from app import ai_cactus
+    f = tmp_path / "shot.png"
+    Image.new("RGB", (40, 30), (1, 2, 3)).save(f)
+    monkeypatch.setattr(ai_cactus, "describe_image", lambda p: "Monthly Budget\nGroceries $120.50 today")
+    monkeypatch.setattr(ai_cactus, "structured", lambda t: None)
+    card = ai_cactus.build_card(f, "image", f.name)
+    assert card["ai_status"] == "ok"
+    assert card["ai_error"].startswith("title:") and "|" not in card["ai_error"]
+    assert "needle empty" in card["ai_error"] and "note:" in card["ai_error"]

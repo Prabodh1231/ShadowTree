@@ -41,6 +41,29 @@ class ModelTimeout(Exception):
     pass
 
 
+ELLIPSIS = "\u2026"
+
+
+def one_line(s: str, limit: int) -> str:
+    """First line of `s`, at most `limit` characters, ending in an ellipsis when cut."""
+    lines = (s or "").strip().splitlines() or [""]
+    first = lines[0].strip()
+    if len(first) > limit:
+        return first[: limit - 1].rstrip() + ELLIPSIS
+    return first + (ELLIPSIS if len(lines) > 1 else "")
+
+
+def clip_error(s: str, limit: int = 200) -> str:
+    """One line, at most `limit` characters. The provenance suffix is kept: only the front is cut."""
+    s = " ".join((s or "").split())
+    if len(s) <= limit:
+        return s
+    head, sep, tail = s.rpartition(" | ")
+    if sep and len(tail) < limit - 20:
+        return head[: limit - len(tail) - len(sep) - 1].rstrip() + ELLIPSIS + sep + tail
+    return s[: limit - 1] + ELLIPSIS
+
+
 def _load_error(stack: str) -> Exception | None:
     return _state["failed"].get(stack)
 
@@ -219,7 +242,7 @@ def build_card(path: Path, kind: str, name: str) -> dict:
         try:
             ai = structured(text)
             if ai is None:
-                notes.append("needle returned nothing")
+                notes.append("needle empty")
         except Exception as exc:
             notes.append(f"needle: {type(exc).__name__}: {exc}")
 
@@ -264,11 +287,16 @@ def build_card(path: Path, kind: str, name: str) -> dict:
     else:
         status = "fallback"
 
-    err = "; ".join(notes)
     note = "title:%s,summary:%s,keywords:%s" % (prov["title"], prov["summary"], prov["keywords"])
+    if status == "ok":  # ok means no error text: side notes go into the provenance (L5)
+        ai_error = clip_error(note + "".join(",note:" + one_line(n, 60) for n in notes), 200)
+    elif notes:
+        ai_error = clip_error("; ".join(one_line(n, 80) for n in notes) + " | " + note, 200)
+    else:
+        ai_error = note
     return {
         "title": title, "summary": summary, "keywords": kws,
         "text_excerpt": (text or meta_line)[: cfg.excerpt_chars],
         "ai_status": status,
-        "ai_error": (err + " | " if err else "") + note,
+        "ai_error": ai_error,
     }

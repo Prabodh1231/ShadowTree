@@ -125,8 +125,8 @@ def set_classify_note(conn, file_id: int, note: str) -> None:
     cur = row["ai_error"] or ""
     cur = cur.split(" [classify:")[0]
     if note:
-        cur += f" [classify: {note}]"
-    conn.execute("UPDATE files SET ai_error=? WHERE id=?", (cur, file_id))
+        cur += f" [classify: {ai_cactus.one_line(note, 60)}]"
+    conn.execute("UPDATE files SET ai_error=? WHERE id=?", (ai_cactus.clip_error(cur, 200), file_id))
     conn.commit()
 
 
