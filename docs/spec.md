@@ -23,7 +23,7 @@ Before Phase 1, create a steering file `.kiro/steering/non-negotiables.md` that 
 - **Read-only on user data.** Scanned files are opened only with `open(path, "rb")` or equivalent read-only APIs. Nothing is ever written inside the scanned root: no DB, cache, thumbnails, or temp files there. App data lives in `backend/data/`.
 - **No invented APIs.** Every call to `cactus`, `gliclass`, `@desert-ant-labs/*`, and `@litertjs/core` must match what Phase 0 verified in `docs/api_notes.md`. If a method from this spec doesn't exist, use the real equivalent and record the deviation. Never guess.
 - **Every AI step has a fallback.** If a model errors, times out, or returns empty, the file is still indexed. The fallbacks are a title from the filename, a summary from the first ~300 chars of text or basic metadata, and keywords from simple frequency analysis. Record `ai_status` per file (`ok | fallback | error`) and show it subtly in the UI.
-- **Local only.** The backend binds to `127.0.0.1`. CORS allows only the Vite dev origin and the built frontend origin. There are no cloud AI APIs and no telemetry.
+- **Local only.** The backend binds to `127.0.0.1`. CORS allows only the Vite dev origin and the built frontend origin. There are no cloud AI APIs. File content never leaves the machine; the only outbound requests are first-run model downloads and the Desert Ant license check (install ID, domain, model and SDK version, platform; no content), both disclosed in the README.
 - **No secrets or personal data in the repo.** Sample data uses obviously fake values (`@example.com` emails, `555-01xx` phone numbers).
 - **Windows first.** Commands in the README are PowerShell. Paths go through `pathlib`. Handle spaces in paths.
 
@@ -150,7 +150,7 @@ Clean, modern, light and dark mode. The UI must not look like a generic template
    - a personal journal-style `.txt`
    - a generated "screenshot" PNG (Pillow, UI-like shapes plus text)
    - a short **16 kHz mono WAV with real speech** (generate it with Windows `System.Speech` via PowerShell or `pyttsx3`, then resample to 16 kHz. Fall back to a tone only if TTS is unavailable and note that in the review)
-2. `scripts/smoke_test.py` runs end-to-end against a running backend: it scans the sample folder, waits for completion, and asserts that every file is indexed, the invoice lands in Finance & Receipts, a new custom folder triggers reclassification, search returns the invoice for "money I spent", and `/reveal` works for a valid id. It also runs the read-only check (hashes and mtimes before and after).
+2. `scripts/smoke_test.py` runs end-to-end against a running backend: it scans the sample folder, waits for completion, and asserts that every file is indexed, the invoice lands in Finance & Receipts, a new custom folder triggers reclassification, search returns Finance & Receipts files as the top 3 for "money I spent" (a receipt ranking first is fine) and the invoice file first for "invoice", and `/reveal` works for a valid id. It also runs the read-only check (hashes and mtimes before and after).
 3. **Demo mode:** `npm run build:demo` builds a static frontend that loads `public/demo/snapshot.json` (exported from `/export/snapshot` after scanning the samples) instead of the API. Reveal is disabled with a tooltip. Search uses simple client-side matching. Make it deployable to GitHub Pages, so judges can click around without installing anything.
 
 ---
