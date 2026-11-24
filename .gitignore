@@ -16,6 +16,7 @@ hf_cache/
 node_modules/
 dist/
 frontend/public/litert-wasm/
+frontend/public/models/
 
 # Secrets
 .env
