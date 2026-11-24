@@ -110,7 +110,7 @@ backend and the browser. Phase 2 can self-host the browser model files
 
 ## Commands run (trimmed output)
 
-All from the repo root `C:\Users\prabo\Winter AI` unless noted.
+All from the repo root `<repo>` unless noted.
 
 ```powershell
 git init -b main
@@ -119,7 +119,7 @@ backend\.venv\Scripts\python.exe -m pip install -U pip --quiet
 backend\.venv\Scripts\python.exe --version
 ```
 ```text
-Initialized empty Git repository in C:/Users/prabo/Winter AI/.git/
+Initialized empty Git repository in <repo>/.git/
 Python 3.12.3
 ```
 

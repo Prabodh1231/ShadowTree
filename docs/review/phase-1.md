@@ -94,7 +94,7 @@ from the spec opened nothing selectable in the same check.
 
 ## Commands and output
 
-All commands are PowerShell 5.1 and were run from `C:\Users\prabo\Winter AI` unless noted. Output is trimmed and copied from
+All commands are PowerShell 5.1 and were run from `<repo>` unless noted. Output is trimmed and copied from
 the run; where the raw output was not kept, the line says so.
 
 **1. Install the new dependencies** (from `backend\`). Output tail not kept; `pip check` printed `No broken requirements found.`
@@ -111,7 +111,7 @@ the run; where the raw output was not kept, the line says so.
 
 ```powershell
 backend\.venv\Scripts\python.exe scripts\download_models.py 2>$null | Select -Last 14
-# data dir: C:\Users\prabo\Winter AI\backend\data
+# data dir: <repo>\backend\data
 # [ok]   Cactus Mirage (image description): 1.0s
 # [ok]   Cactus Whistle (audio transcription): 0.3s
 # [ok]   Cactus Needle 3 (structured extraction): 0.5s
@@ -142,7 +142,7 @@ a later run failed once on `test_post_folders_during_running_job` (a failed `INS
 $d="$env:TEMP\veilfs e2e\Bob's messy files"
 Set-Content "$d\invoice.txt" "Invoice INV-2041 from Northwind Supplies. Billed to billing@example.com, phone +1 555-0142. ..."
 $s.SetOutputToWaveFile("$d\voice memo.wav",$f); $s.Speak("Please pay the electricity invoice of sixty four dollars before Friday.")
-& "C:\Users\prabo\Winter AI\backend\.venv\Scripts\python.exe" "$env:TEMP\mk.py" $d
+& "<repo>\backend\.venv\Scripts\python.exe" "$env:TEMP\mk.py" $d
 Get-ChildItem $d -Recurse | Select Name,Length
 # budget screenshot.png 12838 | invoice.txt 194 | journal.txt 128 | rental agreement.pdf 613 | voice memo.wav 158286
 # sub dir\meeting notes.md 152
@@ -218,7 +218,7 @@ First run (before the no-FTS-hit weighting): top hit was `budget screenshot.png 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/reveal -Method Post -Body '{"file_id":2}' -ContentType "application/json"
 # API reveal: {"revealed":true}
-# file:///C:/Users/prabo/.kiro/crew/scratch/3abee87d/veilfs%20e2e/Bob's%20messy%20files selected=[invoice]
+# file:///<temp>/veilfs%20e2e/Bob's%20messy%20files selected=[invoice]
 Start-Process explorer -ArgumentList "`"/select,$f`""      # the spec's single-argument form
 # (no window under the temp folder was found afterwards)
 ```
