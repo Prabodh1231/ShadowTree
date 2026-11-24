@@ -1,6 +1,6 @@
 # Phase 2 review note: Frontend and browser AI
 
-Status: Step 1 of this note (Phase 1 fixes, UI, browser AI, backend). The wiring fixes and the real-model screenshots are added in a later section when done. Nothing is pushed. Everything is on local `main`.
+Nothing is pushed. Everything is on local `main`.
 
 ## Phase 1 review fixes (owner list, `docs/review/phase-1-feedback.md`)
 
@@ -104,6 +104,51 @@ Browser AI check page (headless Edge, `vite preview` on 4173, self-hosted models
 Outbound requests during the browser run: only `POST` and `OPTIONS` to `events.desertant.com/api/v1/license` and `/api/v1/activate` (the disclosed license check). No huggingface.co, no jsDelivr.
 
 Model files in `frontend/public/models/` (gitignored): 119,862,467 B (114 MB), tags redact v0.4.2, gist v2.2.0, emo v0.7.0.
+
+## Round 2: wiring check against the backend contract (commit 1972047)
+
+Source: the round 2 wiring report. Backend read at 4e729d4. The check used a `git archive HEAD` copy in `<temp>`, a backend on 127.0.0.1:8011, `vite preview` on 4173 and headless Edge over CDP. It had **no backend models** (every file Unsorted, `ai_status` fallback). Browser models were self-hosted. The model lock was taken with 4148 MB free and deleted after.
+
+Fix: `1972047 fix(ui): match the real reclassify job kind exactly` (`frontend/src/main.js`, one line: exact `"reclassify"` instead of a text match on "reclass"). Also landed in this window: `87e3bf3 fix(scanner): N3 also keep rows when stat or is_dir fails; N5 clear model failure cache at each job start`. No other mismatch was found between UI and backend (`sha256` on cards, PATCH 409, `{results, weak}`, `/scan/status` fields, `skipped_*` stats).
+
+Commands (trimmed): `git archive --format=zip -o <temp>\veilfs-r2\be.zip HEAD backend`, then uvicorn on 127.0.0.1:8011 with the data dir in `<temp>`, `python testdata\make_test_folder.py <temp>\veilfs-r2\files` (7 files), `$env:VITE_API_BASE="http://127.0.0.1:8011"; npm run build; node node_modules\vite\bin\vite.js preview`. `npm run build` printed `built in 1.04s`.
+
+| Check | Result | Numbers |
+|---|---|---|
+| Privacy pass PATCHes every file | PASS | 7 PATCH, all 200, 10 s from scan end to last PATCH. All 7 cards: `client_meta.sha256 == sha256` |
+| Second pass skips all | PASS | reload: 0 PATCH, 0 `GET /files/{id}` |
+| Stale sha256 gets 409, UI survives | PASS | 1 PATCH with status 409, 7 cards still shown, no error note, no toast, metadata stayed empty |
+| Sensitive (PII) folder | PASS | 5 files (coffee receipt, invoice, journal, meeting notes, voice memo). Sidebar count 5 |
+| Drawer shows redacted excerpt by default | PASS | `Customer: [GIVEN_NAME_1] [SURNAME_1], [EMAIL_1], phone [PHONE_1]` |
+| New folder suggests an emoji | PASS | "Travel plans" gave a plane emoji after 2.5 s |
+| Job kind after `POST /folders` | PASS | `kind: "reclassify"`, done, 8 of 8 |
+| Skipped line from a real response | PASS | "1 file over 25 MB skipped · 1 hidden or linked file skipped" |
+| "No strong matches. Closest:" | PASS with a caveat | Without GLiClass no real query scored under 35. Checked with `MIN_MATCH = 101` in the **temp copy only**: 0 results, 1 weak, UI showed the state. An unknown query gave the plain no-matches state |
+| Hugging Face fallback | PASS | dist copy without `models\`: 7 GET + 7 PATCH, all 200, within 150 s. Hosts: 127.0.0.1, huggingface.co, us.aws.cdn.hf.co, events.desertant.com |
+| Read-only | PASS | SHA-256 of all 7 test files identical before and after |
+
+The `runPrivacyPass` PATCH path and the Hugging Face fallback, listed as untested earlier, are tested by this round.
+
+Known issues added by this round:
+- `voice memo.wav` is flagged PII. The redactor tags "16000 Hz" in the metadata line as ZIP_CODE and a city. Images and audio with no OCR or transcript text only have a metadata line, so false PII is likely for them. Not fixed.
+- A reclassify job with no backend models puts long GLiClass messages in `errors`. The UI shows the first 3 as red notes. Seen only without models.
+- Gist topics are broad ("Technology & Software" appears on most files).
+- Real weak matches from GLiClass were not seen in that round.
+
+## Screenshots (retaken with real models)
+
+`docs/review/phase-2-shots/`: 01 first run, 02 grid, 03 drawer, 04 search, 05 weak matches, 06 backend down. Each in light and dark, 1920x1080. 01 to 05 were retaken with the **real backend models** (GLiClass float32, Needle, Whistle, Mirage; 5.6 GB was free) and the **browser AI on** (no `?ai=off`). Shot 05 is a real response: query "zebra spaceship" returned `results: []` and three `weak` cards (10%, 9%, 9%). No stand-in response is used any more. Shot 06 (backend down) is unchanged from the first round and needs no models.
+
+Setup: `git archive HEAD` copy of `backend` in `<temp>`, model cache copied into a data dir in `<temp>`, uvicorn on 127.0.0.1:8000, `vite` dev on 127.0.0.1:5173, test files from `make_test_folder.py` into `C:\VeilFS Demo\messy folder` (no user name in the path; deleted after). The driver waits until all 7 files have `client_meta.sha256` before taking shots. `shoot.mjs` in that folder is the driver as last run (shots 02 to 05 only; for 01 the first-run loop was removed because the DB was no longer empty, those two came from an earlier run of the same driver on an empty DB). Model lock taken and deleted. Server, vite and Edge stopped.
+
+What the shots show: titles and folders from the models (Finance & Receipts 3, Work & Research 2, Personal & Notes 1, Screenshots & Media 1, Unsorted 0), PII badges on 4 files, and in the drawer a redacted excerpt (`Customer: [GIVEN_NAME_1] [SURNAME_1], [EMAIL_1], phone [PHONE_1]`). Shot 04 "money I spent" shows receipt 100%, invoice 62%, budget screenshot 55% (the known issue below).
+
+Visible flaws in the shots, not fixed:
+- The drawer **Summary** line shows the original text, including the fake name, email and phone. Only the excerpt box is redacted.
+- The redactor leaves `Card ending 4242` in the excerpt.
+- Sensitive (PII) counts 4 here. In the wiring round it was 5 (`voice memo.wav` was flagged there), so PII flagging of the audio file varies between runs.
+- Several files show the broad Gist topic "Technology & Software", and `budget screenshot.png` also has "Business & Entrepreneurship".
+- Paths in cards are cut on the left (`…mo\messy folder\...`).
 
 ## Known issues
 

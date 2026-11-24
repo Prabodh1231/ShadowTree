@@ -1,4 +1,4 @@
-// Phase 2 screenshot driver: headless Edge over CDP, 1920x1080, light and dark.
+﻿// Phase 2 screenshot driver: headless Edge over CDP, 1920x1080, light and dark.
 // Needs `npm run dev` (5173) and a backend on 8000 (empty DB for mode "main").
 // Usage: node shoot.mjs main <sample folder> <out dir>   |   node shoot.mjs down <out dir>
 import { spawn } from 'node:child_process';
@@ -9,7 +9,7 @@ import { join } from 'node:path';
 const [mode, a1, a2] = process.argv.slice(2);
 const SAMPLE = mode === 'main' ? a1 : null;
 const OUT = mode === 'main' ? a2 : a1;
-const URL_ = 'http://127.0.0.1:5173/?ai=off';
+const URL_ = 'http://127.0.0.1:5173/';
 const PORT = 9344;
 const EDGE = ['C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', 'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'].find(existsSync);
 const profile = mkdtempSync(join(tmpdir(), 'veilfs-shots-'));
@@ -68,7 +68,7 @@ try {
   if (mode === 'down') {
     for (const s of ['light', 'dark']) { await load(s); await waitFor(`!!document.querySelector('.state code')`); await shot(`06-backend-down-${s}`); }
   } else {
-    for (const s of ['light', 'dark']) { await load(s); await waitFor(`!!document.querySelector('.state h2')`); await shot(`01-first-run-empty-${s}`); }
+    
     // Scan once, through the UI, in light mode.
     await load('light');
     await type('root', SAMPLE);
@@ -76,6 +76,8 @@ try {
     await waitFor(`document.querySelectorAll('.card').length >= 3`, 120000);
     await waitFor(`document.getElementById('scan-btn').textContent.startsWith('Index')`, 120000);
     await sleep(800);
+    await waitFor(`(async () => { const c = await (await fetch('http://127.0.0.1:8000/files')).json(); return c.length >= 7 && c.every((x) => x.client_meta && x.client_meta.sha256); })()`, 120000);
+    await sleep(1000);
     // Real search shape, to decide whether weak matches need a stand-in.
     const real = await (await fetch('http://127.0.0.1:8000/search?q=' + encodeURIComponent('money I spent'))).json();
     const cards = await (await fetch('http://127.0.0.1:8000/files')).json();
@@ -84,7 +86,7 @@ try {
       await load(s);
       await waitFor(`document.querySelectorAll('.card').length >= 3`);
       await shot(`02-scanned-grid-${s}`);
-      await ev(`document.querySelector('.card').click()`);
+      await ev(`(document.querySelector('.card:has(.pii)') || document.querySelector('.card')).click()`);
       await waitFor(`!document.getElementById('drawer').hidden && !!document.querySelector('#drawer h2')`);
       await shot(`03-drawer-${s}`);
       await ev(`document.getElementById('scrim').click()`);
@@ -94,13 +96,16 @@ try {
       await sleep(600);
       await shot(`04-search-results-${s}`);
       // Weak matches: stand-in response when the backend does not return them yet (noted in the report).
-      interceptSearch = { results: [], weak: cards.slice(0, 3).map((c, i) => ({ ...c, match: 30 - i * 4, score: (30 - i * 4) / 100 })) };
-      await send('Fetch.enable', { patterns: [{ urlPattern: '*127.0.0.1:8000/search*' }] });
-      await type('q', 'quantum gardening');
+      interceptSearch = null; /* results: [], weak: cards.slice(0, 3).map((c, i) => ({ ...c, match: 30 - i * 4, score: (30 - i * 4) / 100 })) };
+      */
+      await type('q', 'zebra spaceship');
       await ev(`document.getElementById('search-form').requestSubmit()`);
       await waitFor(`!!document.querySelector('.grid-label')`);
       await shot(`05-search-weak-${s}`);
-      await send('Fetch.disable');
     }
   }
 } finally { edge.kill(); try { ws?.close(); } catch { /* */ } process.exit(0); }
+
+
+
+
