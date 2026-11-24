@@ -205,6 +205,7 @@ def create_folder(body: FolderBody):
                            (name, body.emoji, (body.description or "").strip() or None))
         conn.commit()
     except sqlite3.IntegrityError:
+        conn.rollback()  # a failed INSERT leaves the implicit transaction (and write lock) open
         raise HTTPException(409, "a folder with this name already exists")
     job_id, state = jobs.start_reclassify()
     return {"folder_id": cur.lastrowid, "job_id": job_id, "job": state}
