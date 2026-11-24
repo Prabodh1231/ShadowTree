@@ -284,7 +284,7 @@ function showProgress(s) {
   const running = s.state === 'running' || s.state === 'queued';
   p.hidden = !running;
   if (!running) return;
-  const reclass = (s.kind ?? '').includes('reclass');
+  const reclass = s.kind === 'reclassify'; // job kind text from backend/app/jobs.py
   const fill = $('bar-fill');
   const known = s.total > 0;
   fill.classList.toggle('indeterminate', !known);
