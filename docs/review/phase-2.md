@@ -47,24 +47,24 @@ By spec feature (UI commits a7889fa, 24179a5, 93e6963):
 | Deviation | Why |
 |---|---|
 | Desert Ant models run on the **main thread**, one at a time, no Web Worker | Owner decision in the Phase 0 and Phase 1 feedback: no worker shim. The spec said "ideally" a worker. |
-| Browser models are **self-hosted** from `/models/<m>/` (gitignored, fetched by `npm run fetch-models`), with the Hugging Face default as fallback when the local file is missing | Owner decision. Keeps the browser from calling Hugging Face at run time. The fallback path was **not exercised** this round. |
+| Browser models are **self-hosted** from `/models/<m>/` (gitignored, fetched by `npm run fetch-models`), with the Hugging Face default as fallback when the local file is missing | Owner decision. Keeps the browser from calling Hugging Face at run time. The fallback path was tested in Round 2 (PASS, see below). |
 | Gist `topics` hold topic **names** (for example "Travel"), not ids | That is what the Gist browser build returns. |
 | A plain rescan does **not relink** unchanged files. Relinking happens when a file is re-indexed | Side effect of L4: only the new folder's links are written. A full relink is not offered. |
 | `/export/snapshot` still **drops `sha256`** from cards | Not changed in this round. Demo mode (Phase 3) does not need it. |
 | `vite build` output (`dist`) is **292 MB** (models 114 MB, three wasm cores of 46 MB each, litert-wasm about 46 MB) | The self-hosted models are copied from `public/models` into `dist`. Not reduced. |
 | `scripts/smoke_test.py` does not exist yet, so its spec line was changed in text only | It is a Phase 3 file. |
-| Phase 2 first screenshots used `?ai=off`, no models, one stand-in `/search` response | Replaced by the retake in the section "Screenshots" below once it is done. |
+| The first Phase 2 screenshots (93e6963) used `?ai=off`, no models and one stand-in `/search` response | Shots 01 to 05 were retaken with real models and the browser AI on in commit 00101c9. See "Screenshots" below. Shot 06 is from the first set. |
 
 ## Commands run, with trimmed output
 
 All output copied from the round reports (`phase2-r1-backend.md`, `phase2-r1-ui.md`, `phase2-r1-browser-ai.md`). Nothing re-typed from memory.
 
-Backend tests (`<repo>\backend`), first run after the round 1 fixes (the N3 and N5 fixes below bring it to 50 passed in 3.73s):
+Backend tests (`<repo>\backend`). Tail at HEAD, from `phase2-r2-backend-fix.md` (after the N3 and N5 follow-up fixes in 87e3bf3; the round 1 report showed 48 passed in 3.37s before them):
 
 ```
 .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
-................................................                         [100%]
-48 passed in 3.37s
+..................................................                       [100%]
+50 passed in 3.73s
 ```
 
 Frontend build (`<repo>\frontend`, `npm run build`):
@@ -144,20 +144,42 @@ Setup: `git archive HEAD` copy of `backend` in `<temp>`, model cache copied into
 What the shots show: titles and folders from the models (Finance & Receipts 3, Work & Research 2, Personal & Notes 1, Screenshots & Media 1, Unsorted 0), PII badges on 4 files, and in the drawer a redacted excerpt (`Customer: [GIVEN_NAME_1] [SURNAME_1], [EMAIL_1], phone [PHONE_1]`). Shot 04 "money I spent" shows receipt 100%, invoice 62%, budget screenshot 55% (the known issue below).
 
 Visible flaws in the shots, not fixed:
-- The drawer **Summary** line shows the original text, including the fake name, email and phone. Only the excerpt box is redacted.
+- The drawer **Summary** line and the card summaries show the original text, including the fake name, email and phone. Only the excerpt box is redacted. **Fixed after these shots (0a2148f, c79d595), see "Summary redaction". The shots were not retaken.**
 - The redactor leaves `Card ending 4242` in the excerpt.
 - Sensitive (PII) counts 4 here. In the wiring round it was 5 (`voice memo.wav` was flagged there), so PII flagging of the audio file varies between runs.
 - Several files show the broad Gist topic "Technology & Software", and `budget screenshot.png` also has "Business & Entrepreneurship".
 - Paths in cards are cut on the left (`…mo\messy folder\...`).
 
-## Known issues
+## Summary redaction (0a2148f, c79d595)
 
+The shots above showed raw summaries with PII, in the drawer's default Redacted view and on the cards. Fixes in `frontend/src/main.js` and `frontend/src/ai/browserAI.js` (new `redactText`; no backend or API change). `npm run build` passes (`built in 1.04s`).
+
+- **Drawer (0a2148f).** In Redacted view the summary is the Redact result. While that runs, or when the model is not loaded or fails, it shows "Summary hidden in Redacted view", never the raw text. Original view shows the raw summary.
+- **Cards (c79d595).** Cards of files with `client_meta.has_pii` show the Redact result of the summary, cached in memory per file id and sha256 so each is redacted once. Without the model they show "Summary hidden: personal data". Other cards are unchanged.
+- **README line 30 (c79d595).** The Desert Ant credit is now described as being in the app sidebar footer.
+
+Checked in headless Edge against a backend copy without models (summary is the plain fallback text), browser models self-hosted, model lock taken and deleted. Drawer, `coffee receipt.txt`:
+
+| Mode | Redacted view | Original view |
+|---|---|---|
+| `?ai=off` | `Summary hidden in Redacted view` | `Customer: Alex Sample, alex.sample@example.com, phone 555-0123 2 x flat white  $7.00` |
+| browser AI on | `Customer: [GIVEN_NAME_1] [SURNAME_1], [EMAIL_1], phone [PHONE_1] flat white  $7.00` | same raw text |
+
+Cards:
+
+| Mode | Card of a PII file | Card without PII |
+|---|---|---|
+| `?ai=off`, file flagged through the API | `Summary hidden: personal data` | raw summary, unchanged |
+| browser AI on, after the privacy pass | `Customer: [GIVEN_NAME_1] [SURNAME_1], [EMAIL_1], phone [PHONE_1] flat white  $7.00`; `From: Northwind Supplies, [BUILDING_NUMBER_1] [STREET_NAME_1] Bill to: [GIVEN_NAME_1] [SURNAME_1]` | raw summary, unchanged |
+
+Limits: a card shows its raw summary until the privacy pass has flagged the file (a few seconds after a scan, or none if the AI is off). Search-result cards use the same function. Redact over-redacts at times: `Weekly sync, project [CITY_1]`, `WAV audio, 5.0 s, [ZIP_CODE_1] Hz, [CITY_1]` (the known false PII on audio metadata). `journal.txt` is flagged PII in this run but its summary has no visible change. The screenshots were not retaken.
+
+## Known issues
 - **"money I spent" fails the new Phase 3 rule.** Receipt 100, invoice 62, `budget screenshot.png` 55 (Screenshots & Media). The rule is "top 3 all Finance & Receipts". This test set has only 3 Finance files, and the third, `voice memo.wav` (speech says "pay the electricity invoice"), scored under the cut-off of 35 for this query. Cut-off 35 and the 0.7/0.3 blend are as the owner specified. **Not tuned toward this data.**
 - "invoice" passes: the invoice is #1 (90).
-- `runPrivacyPass` PATCH path was **untested** in the browser AI round because C1 had not landed. It is covered in the wiring section when that is done.
-- Hugging Face fallback for browser models: not exercised.
+- Done in Round 2: the `runPrivacyPass` PATCH path (untested in the browser AI round because C1 had not landed) and the Hugging Face fallback are both tested and pass, see the Round 2 table.
 - Each of the three wasm cores (about 46 MB) compiles on the main thread. Startup took 3.9 s with local model files.
 - `vite preview` returns `index.html` for missing paths. The HEAD check in `browserAI.js` rejects `text/html` for that reason.
 - Mirage per-call errors are not cached (only load errors).
 - Cloud-only skip is tested with fake attributes only, not on a real OneDrive placeholder. Reparse and junction behaviour is unchanged and untested.
-- UI: folder chip shows no % when the score is 0. Match values at or under 1 are read as fractions. Reclassify jobs are detected by the text "reclass", unverified against the real job name. The full file list is fetched once and filtered in the browser. Narrow-screen layout is only a basic 900 px breakpoint. The copy button and long-path wrapping were not checked.
+- UI: folder chip shows no % when the score is 0. Match values at or under 1 are read as fractions. The reclassify job kind is now matched exactly (1972047). The full file list is fetched once and filtered in the browser. Narrow-screen layout is only a basic 900 px breakpoint. The copy button and long-path wrapping were not checked.
