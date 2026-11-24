@@ -227,13 +227,20 @@ def build_card(path: Path, kind: str, name: str) -> dict:
     title = ""
     # Needle copies spans from the Mirage description ("Bar"), so images keep the filename title.
     if ai and kind != "image" and 3 <= len(ai["title"].strip()) <= 80:
-        title, prov["title"] = ai["title"].strip(), "model"
+        if ex.is_grounded(ai["title"], text):
+            title, prov["title"] = ai["title"].strip(), "model"
+        else:
+            prov["title"] = "fallback(ungrounded)"
     if not title:
         title = ex.title_from_name(name)
 
     summary = ""
     if ai and len(ai["summary"].strip()) >= 20:
-        summary, prov["summary"] = ai["summary"].strip()[:300], "model"
+        if ex.is_grounded(ai["summary"], text):
+            summary, prov["summary"] = ai["summary"].strip()[:300], "model"
+        else:
+            prov["summary"] = "fallback(ungrounded)"
+    ungrounded = prov["summary"] == "fallback(ungrounded)"  # the model summary was rejected
     if not summary and text and source_model == "mirage":  # keep the OCR lines: they make it searchable
         summary, prov["summary"] = " | ".join(text.splitlines())[:300], source_model
     elif not summary and text and source_model:
@@ -242,7 +249,9 @@ def build_card(path: Path, kind: str, name: str) -> dict:
         summary = ex.fallback_summary(text)
     if not summary:
         summary = meta_line or f"{kind} file"
-    if meta_line and kind in ("image", "audio") and prov["summary"] == "fallback":
+    if ungrounded:
+        prov["summary"] = "fallback(ungrounded)"  # keep the marker even when OCR or speech text fills in
+    if meta_line and kind in ("image", "audio") and prov["summary"].startswith("fallback"):
         summary = f"{meta_line}. {summary}" if summary != meta_line else summary
 
     kws, kw_src = ex.clean_keywords(ai["keywords"] if ai else None, text or title)

@@ -151,6 +151,20 @@ def fallback_summary(text: str, limit: int = 300) -> str:
     return out
 
 
+def _tokens(s: str) -> list[str]:
+    return [w for w in re.findall(r"\w+", s.lower(), re.UNICODE) if len(w) > 2]
+
+
+def is_grounded(candidate: str, source: str, min_share: float = 0.9) -> bool:
+    """True when at least `min_share` of the candidate's word tokens (lowercase, length > 2)
+    occur in the source text. Guards against model output with invented words."""
+    toks = _tokens(candidate)
+    if not toks:
+        return False
+    have = set(_tokens(source))
+    return sum(1 for w in toks if w in have) / len(toks) >= min_share
+
+
 def _bad_keyword(k: str) -> bool:
     return (not k or _EMAILISH.search(k) is not None or k.lower() in STOPWORDS
             or not re.search(r"[A-Za-z]", k) or len(k) < 3)

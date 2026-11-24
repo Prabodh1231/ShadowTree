@@ -118,3 +118,26 @@ def test_l1_candidates_capped_and_batched(client, tmp_path, monkeypatch):
     monkeypatch.setattr(ai_classify, "rerank", rerank)
     client.get("/search", params={"q": "zeppelins"})
     assert sum(sizes) == 60 and max(sizes) == 16 and len(sizes) == 4   # 40 FTS + 20 recent
+
+
+# ---- L2: ungrounded model text is rejected ---------------------------------------------
+
+def test_l2_is_grounded_digitale_migration():
+    from app import extractors as ex
+    src = "Weekly sync. Sam owns the API migration and will report on Friday."
+    assert not ex.is_grounded("Sam owns the API migration digitale migration", src)   # 6 of 7 = 86%
+    assert ex.is_grounded("Sam owns the API migration", src)
+    assert not ex.is_grounded("", src)
+
+
+def test_l2_build_card_uses_fallback_for_ungrounded_summary(tmp_path, monkeypatch):
+    from app import ai_cactus
+    f = tmp_path / "meeting notes.md"
+    f.write_text("Weekly sync.\nSam owns the API migration and will report on Friday.\n", encoding="utf-8")
+    monkeypatch.setattr(ai_cactus, "structured", lambda text: {
+        "title": "Migration meeting", "summary": "Sam owns the API migration digitale migration",
+        "keywords": ["api"]})
+    card = ai_cactus.build_card(f, "text", f.name)
+    assert "digitale" not in card["summary"] and "Sam owns the API migration" in card["summary"]
+    assert "summary:fallback(ungrounded)" in card["ai_error"]
+    assert "title:fallback(ungrounded)" in card["ai_error"]      # "Migration meeting" is not in the text either
