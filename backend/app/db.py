@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS file_folder_links (
   PRIMARY KEY (file_id, folder_id)
 );
 CREATE INDEX IF NOT EXISTS idx_links_folder ON file_folder_links(folder_id);
+CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
   name, title, summary, keywords, text_excerpt, tokenize='unicode61'
 );
@@ -147,3 +148,32 @@ def delete_file(conn: sqlite3.Connection, file_id: int) -> None:
     conn.execute("DELETE FROM files_fts WHERE rowid=?", (file_id,))
     conn.execute("DELETE FROM files WHERE id=?", (file_id,))  # links cascade
     conn.commit()
+
+
+# ---- API views ------------------------------------------------------------------
+
+def file_cards(conn: sqlite3.Connection, rows, full: bool = False) -> list[dict]:
+    """Rows of `files` -> JSON-ready dicts with folder links. `full` adds excerpt and sha256."""
+    rows = list(rows)
+    ids = [r["id"] for r in rows]
+    links: dict[int, list[dict]] = {i: [] for i in ids}
+    for i in range(0, len(ids), 500):
+        part = ids[i:i + 500]
+        q = ("SELECT l.file_id, l.folder_id, l.score, v.name, v.emoji FROM file_folder_links l "
+             "JOIN virtual_folders v ON v.id=l.folder_id WHERE l.file_id IN (%s) ORDER BY l.score DESC"
+             % ",".join("?" * len(part)))
+        for l in conn.execute(q, part):
+            links[l["file_id"]].append({"folder_id": l["folder_id"], "name": l["name"],
+                                        "emoji": l["emoji"], "score": l["score"]})
+    out = []
+    for r in rows:
+        d = {"id": r["id"], "path": r["path"], "name": r["name"], "ext": r["ext"], "kind": r["kind"],
+             "size": r["size"], "mtime": r["mtime"], "title": r["title"], "summary": r["summary"],
+             "keywords": json.loads(r["keywords"] or "[]"), "ai_status": r["ai_status"],
+             "ai_error": r["ai_error"], "client_meta": json.loads(r["client_meta"] or "{}"),
+             "indexed_at": r["indexed_at"], "folders": links[r["id"]]}
+        if full:
+            d["text_excerpt"] = r["text_excerpt"]
+            d["sha256"] = r["sha256"]
+        out.append(d)
+    return out
