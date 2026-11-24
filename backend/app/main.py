@@ -111,13 +111,13 @@ def scan(body: ScanBody):
     if is_inside(root, get_settings().data_dir):
         raise HTTPException(400, "root must not be the app data folder or inside it")
     try:
-        conn = db.get_conn()
-        conn.execute("INSERT INTO app_meta(key, value) VALUES ('scan_root', ?) "
-                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(root),))
-        conn.commit()
         jid = jobs.start_scan(root)
     except jobs.JobRunning:
         raise HTTPException(409, "a job is already running")
+    conn = db.get_conn()  # only after the job started: a refused scan must not change scan_root
+    conn.execute("INSERT INTO app_meta(key, value) VALUES ('scan_root', ?) "
+                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(root),))
+    conn.commit()
     return {"job_id": jid}
 
 

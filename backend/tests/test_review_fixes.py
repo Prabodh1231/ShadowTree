@@ -200,3 +200,21 @@ def test_s1_skip_counts_with_fake_attributes(client, sample_root, monkeypatch):
 def test_s1_keys_present_without_skips(client, sample_root):
     st = run_scan(client, sample_root)["stats"]
     assert (st["skipped_too_large"], st["skipped_cloud_only"], st["skipped_hidden_or_link"]) == (0, 0, 0)
+
+
+# ---- N2: a refused scan keeps the old scan_root ------------------------------------------
+
+def test_n2_refused_scan_does_not_change_scan_root(client, sample_root, tmp_path, monkeypatch):
+    import threading
+    from app import db, jobs
+    gate = threading.Event()
+    real = ai_classify.classify
+    monkeypatch.setattr(ai_classify, "classify", lambda t, l: (gate.wait(10), real(t, l))[1])
+    assert client.post("/scan", json={"root": str(sample_root)}).status_code == 200
+    other = tmp_path / "other"
+    other.mkdir()
+    assert client.post("/scan", json={"root": str(other)}).status_code == 409
+    row = db.get_conn().execute("SELECT value FROM app_meta WHERE key='scan_root'").fetchone()
+    assert row["value"] == str(sample_root.resolve())
+    gate.set()
+    assert jobs.wait_idle(60)
