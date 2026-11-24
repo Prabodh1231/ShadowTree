@@ -15,7 +15,7 @@ hf_cache/
 # Node / Vite
 node_modules/
 dist/
-frontend/public/wasm/
+frontend/public/litert-wasm/
 
 # Secrets
 .env

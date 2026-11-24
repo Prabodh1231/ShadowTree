@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VeilFS Phase 0 - browser AI spike</title>
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 960px; }
+      h1 { font-size: 1.25rem; }
+      .step { border: 1px solid #ccc; border-radius: 8px; padding: .75rem 1rem; margin: .75rem 0; }
+      .ok { border-color: #2a9d55; }
+      .fail { border-color: #c0392b; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #f5f5f7; padding: .5rem; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>VeilFS Phase 0: Desert Ant browser spike (Redact, Gist, Emo)</h1>
+    <p>Runs one real call per model in this browser. Results also land in <code>window.__spike</code>.</p>
+    <div id="out">Running...</div>
+    <script type="module" src="./browser-spike.js"></script>
+  </body>
+</html>
