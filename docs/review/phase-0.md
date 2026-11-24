@@ -1,8 +1,10 @@
 # Phase 0 review: API spike
 
+**Resolved:** approved with decisions, see [`phase-0-feedback.md`](phase-0-feedback.md).
+
 Status: **all three AI stacks install and run on this Windows machine.** No
 stack is broken. One policy conflict needs a decision before Phase 2 (see
-[Decision needed](#decision-needed-desert-ant-license-check-vs-no-telemetry)).
+[Decision needed](#decision-needed-resolved-option-a-desert-ant-license-check-vs-no-telemetry)).
 
 The verified APIs are in [`docs/api_notes.md`](../api_notes.md).
 
@@ -77,7 +79,7 @@ The verified APIs are in [`docs/api_notes.md`](../api_notes.md).
    only README, license and config there. I did not move your file; say if it
    should go to `docs/spec.md`.
 
-## Decision needed: Desert Ant license check vs "no telemetry"
+## Decision needed (RESOLVED: Option A): Desert Ant license check vs "no telemetry"
 
 The three Desert Ant SDKs run inference fully in the browser, but on load they
 also `POST https://events.desertant.com/api/v1/license` and `/activate`

@@ -20,7 +20,7 @@ headless Microsoft Edge 158.
 | PII redaction (browser) | `Redact.load()` + `redaction(text)` | ⚠️ works; mandatory license check, see [Desert Ant network calls](#network-calls-and-the-license-check) |
 | Topic tags (browser) | `Gist.load()` + `classify(text)` | ⚠️ works; coarse 36-topic taxonomy, license check |
 | Emoji suggestion (browser) | `Emo.load()` + `suggestions(text)` | ⚠️ works; license check |
-| Desert Ant in a module Web Worker | any of the three | ⚠️ works only with an `importScripts` shim |
+| Desert Ant in a module Web Worker | any of the three | ⚠️ works only with an `importScripts` shim. **Decision: run on the main thread, no worker** |
 | Production build (`vite build` + `vite preview`) | all three | ✅ works |
 
 ## Shared setup for the backend (env vars)
@@ -402,8 +402,13 @@ license from licensing@desertant.com. The SDK reads `globalThis.__dalLicenseEndp
 (the package's own tests point it at `127.0.0.1:9`), but using that to dodge
 the check would breach the license, so VeilFS must not.
 
-This conflicts with the non-negotiable "no telemetry". It is the open decision
-in `docs/review/phase-0.md`.
+**Decision: Option A, chosen by the owner.** Allow the check and disclose it
+(README "Network & privacy"). The steering rule now reads "No user content
+leaves the machine" and names the license check as an allowed outbound request
+(`.kiro/steering/non-negotiables.md`). License versions: the npm packages
+`@desert-ant-labs/*@5.0.0` ship `LICENSE.md` v1.0, which points to
+https://license.desertant.com/1.0. The site is at v1.1 (30 October 2026). v1.1
+describes the license check this SDK actually makes, so VeilFS relies on v1.1.
 
 The license also requires a visible "Powered by Desert Ant Labs" credit linked
 to https://desertant.com (Section 9).
@@ -431,6 +436,11 @@ All in `frontend/vite.config.js` and `frontend/package.json`:
 
 ### Web Worker
 
+**Decision (Phase 0 review): run Desert Ant on the main thread after first
+paint via dynamic `import()`. No worker shim (the shim stays only as spike
+evidence in `frontend/spikes/spike-worker.js`). Revisit only if Phase 2 shows
+UI jank.** What follows is the spike evidence.
+
 - A module worker (`new Worker(url, { type: 'module' })`) **fails** without help:
   `TypeError: Module scripts don't support importScripts()`, thrown from
   `@litertjs/wasm-utils` `runScript()`, which calls `importScripts` whenever
@@ -453,3 +463,5 @@ pass `modelBaseUrl: '/models/<model>/'`. The SDK then fetches
 `<artifact>` + `<sidecars>` as reported by the core's own `modelInfo()`.
 Whether that list matches the files above exactly still has to be checked in
 Phase 2; if self-hosting fails, keep the HF download as the fallback.
+Phase 2 adds `scripts/fetch-browser-models.mjs`, which downloads the pinned
+files into `frontend/public/models/`.
