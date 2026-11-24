@@ -173,13 +173,15 @@ def test_health_loads_nothing(client):
 
 def test_sensitive_counts_and_client_meta(client, sample_root):
     run_scan(client, sample_root)
-    fid = next(c["id"] for c in client.get("/files").json() if c["name"] == "invoice.txt")
-    r = client.patch(f"/files/{fid}/client-meta", json={"has_pii": True, "pii_types": ["EMAIL"], "topics": ["finance"]})
+    card = next(c for c in client.get("/files").json() if c["name"] == "invoice.txt")
+    fid, sha = card["id"], card["sha256"]
+    r = client.patch(f"/files/{fid}/client-meta",
+                     json={"sha256": sha, "has_pii": True, "pii_types": ["EMAIL"], "topics": ["finance"]})
     assert r.status_code == 200
     sens = next(f for f in client.get("/folders").json() if f["name"] == "Sensitive (PII)")
     assert sens["file_count"] == 1
     assert [c["id"] for c in client.get("/files", params={"folder_id": sens["id"]}).json()] == [fid]
-    assert client.patch(f"/files/{fid}/client-meta", json={"has_pii": True, "x": 1}).status_code == 422
+    assert client.patch(f"/files/{fid}/client-meta", json={"sha256": sha, "has_pii": True, "x": 1}).status_code == 422
     assert client.get(f"/files/{fid}").json()["text_excerpt"]
 
 

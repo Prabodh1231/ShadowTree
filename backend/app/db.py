@@ -153,7 +153,7 @@ def delete_file(conn: sqlite3.Connection, file_id: int) -> None:
 # ---- API views ------------------------------------------------------------------
 
 def file_cards(conn: sqlite3.Connection, rows, full: bool = False) -> list[dict]:
-    """Rows of `files` -> JSON-ready dicts with folder links. `full` adds excerpt and sha256."""
+    """Rows of `files` -> JSON-ready dicts with folder links. `full` adds the excerpt."""
     rows = list(rows)
     ids = [r["id"] for r in rows]
     links: dict[int, list[dict]] = {i: [] for i in ids}
@@ -170,10 +170,9 @@ def file_cards(conn: sqlite3.Connection, rows, full: bool = False) -> list[dict]
         d = {"id": r["id"], "path": r["path"], "name": r["name"], "ext": r["ext"], "kind": r["kind"],
              "size": r["size"], "mtime": r["mtime"], "title": r["title"], "summary": r["summary"],
              "keywords": json.loads(r["keywords"] or "[]"), "ai_status": r["ai_status"],
-             "ai_error": r["ai_error"], "client_meta": json.loads(r["client_meta"] or "{}"),
+             "ai_error": r["ai_error"], "sha256": r["sha256"], "client_meta": json.loads(r["client_meta"] or "{}"),
              "indexed_at": r["indexed_at"], "folders": links[r["id"]]}
         if full:
             d["text_excerpt"] = r["text_excerpt"]
-            d["sha256"] = r["sha256"]
         out.append(d)
     return out

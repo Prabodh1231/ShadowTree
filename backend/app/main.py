@@ -63,6 +63,7 @@ class RevealBody(Body):
 
 
 class ClientMetaBody(Body):
+    sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")  # the content hash the browser scanned
     has_pii: bool
     pii_types: list[str] = Field(default_factory=list, max_length=40)
     topics: list[str] = Field(default_factory=list, max_length=40)
@@ -168,11 +169,14 @@ def get_file(file_id: int):
 @app.patch("/files/{file_id}/client-meta")
 def patch_client_meta(file_id: int, body: ClientMetaBody):
     conn = db.get_conn()
-    row = conn.execute("SELECT client_meta FROM files WHERE id=?", (file_id,)).fetchone()
+    row = conn.execute("SELECT client_meta, sha256 FROM files WHERE id=?", (file_id,)).fetchone()
     if not row:
         raise HTTPException(404, "file not found")
+    if (row["sha256"] or "").lower() != body.sha256.lower():
+        raise HTTPException(409, "file changed since it was scanned; reload and scan again")
     meta = json.loads(row["client_meta"] or "{}")
     meta.update(body.model_dump(exclude_none=True))
+    meta["sha256"] = body.sha256.lower()
     conn.execute("UPDATE files SET client_meta=? WHERE id=?", (json.dumps(meta, ensure_ascii=False), file_id))
     conn.commit()
     return meta
