@@ -48,9 +48,6 @@ class Settings:
     pdf_max_pages: int
     gliclass_dtype: str
     torch_threads: int
-    search_fts_limit: int          # FTS candidates sent to rerank
-    search_min_hits: int           # fewer FTS hits than this -> add recent files
-    search_fallback_cap: int       # cap on "recent files" candidates
     search_lock_wait_s: float      # how long /search waits for the model lock
     model_timeout_s: float         # soft timeout (measured, cannot interrupt)
     excerpt_chars: int
@@ -68,9 +65,6 @@ def get_settings() -> Settings:
         pdf_max_pages=_int("PDF_MAX_PAGES", 10),
         gliclass_dtype=os.environ.get("GLICLASS_DTYPE", "float32"),
         torch_threads=_int("TORCH_THREADS", max(1, (os.cpu_count() or 2) // 2)),
-        search_fts_limit=_int("SEARCH_FTS_LIMIT", 50),
-        search_min_hits=_int("SEARCH_MIN_HITS", 5),
-        search_fallback_cap=_int("SEARCH_FALLBACK_CAP", 200),
         search_lock_wait_s=_float("SEARCH_LOCK_WAIT_S", 5.0),
         model_timeout_s=_float("MODEL_TIMEOUT_S", 60.0),
         excerpt_chars=_int("EXCERPT_CHARS", 2000),

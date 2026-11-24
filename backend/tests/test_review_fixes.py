@@ -1,6 +1,7 @@
 """Tests for the Phase 1 review fixes (C1 and the MUST/SHOULD items)."""
 import pytest
 
+from app import ai_classify
 from conftest import run_scan
 
 
@@ -63,3 +64,57 @@ def test_l4_new_folder_keeps_existing_links(client, sample_root, monkeypatch):
     assert [c["id"] for c in client.get("/files", params={"folder_id": sens["id"]}).json()] == [inv["id"]]
     assert all(l[1] != "Sensitive (PII)" for l in after)
     assert any(f["id"] == fid for f in client.get("/folders").json())
+
+
+# ---- L1: search cut-off, weak list, name boost, candidate cap, batches --------------
+
+def test_l1_name_boost_rules():
+    from app.search import name_boost
+    assert name_boost("invoice", "invoice INV-3307.pdf", "") == 20
+    assert name_boost("INVOI", "x.pdf", "Quarterly invoice") == 20              # prefix, title, any case
+    assert name_boost("the invoice", "invoice.txt", "") == 20                    # stopword ignored
+    assert name_boost("money I spent", "coffee receipt.txt", "Corner cafe") == 0
+    assert name_boost("invoice march", "invoice.txt", "") == 0                   # every token must match
+    assert name_boost("the", "the.txt", "") == 0                                 # nothing left after stopwords
+
+
+def test_l1_cutoff_weak_and_shape(client, sample_root, monkeypatch):
+    run_scan(client, sample_root)
+    monkeypatch.setattr(ai_classify, "rerank", lambda q, p, wait=None: [0.05] * len(p))
+    body = client.get("/search", params={"q": "zzqx"}).json()
+    assert body["results"] == [] and 1 <= len(body["weak"]) <= 3
+    files_keys = set(client.get("/files").json()[0])
+    for w in body["weak"]:
+        assert set(w) == files_keys | {"score", "match"} and w["match"] < 35
+    monkeypatch.setattr(ai_classify, "rerank",
+                        lambda q, p, wait=None: [0.9 if "invoice" in x.lower() else 0.05 for x in p])
+    ok = client.get("/search", params={"q": "invoice"}).json()
+    assert ok["weak"] == [] and ok["results"] and all(r["match"] >= 35 for r in ok["results"])
+    assert set(ok["results"][0]) == files_keys | {"score", "match"}
+
+
+def test_l1_invoice_name_boost_ranks_it_first(client, sample_root, monkeypatch):
+    run_scan(client, sample_root)
+    # voice.wav's text also says "invoice" and the model likes it slightly better
+    monkeypatch.setattr(ai_classify, "rerank",
+                        lambda q, p, wait=None: [0.62 if "electricity" in x.lower() else 0.60 for x in p])
+    body = client.get("/search", params={"q": "invoice"}).json()
+    assert body["results"][0]["name"] == "invoice.txt"
+
+
+def test_l1_candidates_capped_and_batched(client, tmp_path, monkeypatch):
+    from app.ai_cactus import MODEL_LOCK
+    root = tmp_path / "many"
+    root.mkdir()
+    for n in range(80):
+        (root / f"note{n:02d}.txt").write_text(f"Note number {n} about zeppelins and balloons for the test.")
+    run_scan(client, root)
+    sizes = []
+
+    def rerank(q, passages, wait=None):
+        assert not MODEL_LOCK.locked()      # the search itself never holds the model lock
+        sizes.append(len(passages))
+        return [0.5] * len(passages)
+    monkeypatch.setattr(ai_classify, "rerank", rerank)
+    client.get("/search", params={"q": "zeppelins"})
+    assert sum(sizes) == 60 and max(sizes) == 16 and len(sizes) == 4   # 40 FTS + 20 recent
