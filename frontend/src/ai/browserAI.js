@@ -85,6 +85,20 @@ export async function suggestEmoji(name, description) {
   }
 }
 
+// Redacted copy of one text (the drawer summary). Null when Redact is not
+// loaded, fails, times out or the text is empty.
+export async function redactText(text) {
+  try {
+    if (!text?.trim()) return null;
+    await startBrowserAI();
+    if (!models.redact) return null;
+    const r = await withTimeout(models.redact.redaction(text, { minimumConfidence: 0.6 }));
+    return r ? r.redactedText : null;
+  } catch {
+    return null;
+  }
+}
+
 // fullFile: the GET /files/{id} body (text_excerpt, summary). Returns null when
 // no model could answer.
 export async function analyzeFile(fullFile) {

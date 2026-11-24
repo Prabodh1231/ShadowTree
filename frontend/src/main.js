@@ -1,6 +1,6 @@
 import './styles.css';
 import { api, ApiError, API_BASE } from './api.js';
-import { startBrowserAI, suggestEmoji, runPrivacyPass } from './ai/browserAI.js';
+import { startBrowserAI, suggestEmoji, runPrivacyPass, redactText } from './ai/browserAI.js';
 
 const $ = (id) => document.getElementById(id);
 const START_CMD = 'cd "<repo>\\backend"\n.\\.venv\\Scripts\\Activate.ps1\nuvicorn app.main:app --host 127.0.0.1 --port 8000';
@@ -224,9 +224,28 @@ async function openDrawer(id) {
 function closeBtn() { return h('button', { class: 'btn btn-small drawer-close', type: 'button', text: 'Close ✕', onclick: closeDrawer }); }
 function closeDrawer() { $('drawer').hidden = true; $('scrim').hidden = true; drawerFile = null; }
 
+// Redacted view never shows the raw summary: it shows the Redact result, or a
+// short line while that is pending, unavailable or failed.
+function summaryText(f, mode) {
+  if (!f.summary) return 'No summary available.';
+  if (mode === 'original') return f.summary;
+  return f.redactedSummary ?? 'Summary hidden in Redacted view';
+}
+async function redactDrawerSummary(f) {
+  if (f.redactedSummary !== undefined || !f.summary) return;
+  f.redactedSummary = null; // one try per open
+  const text = await redactText(f.summary);
+  if (text == null || drawerFile !== f) return;
+  f.redactedSummary = text;
+  const el = $('drawer-summary');
+  const redactedOn = document.querySelector('.seg [aria-pressed="true"]')?.textContent === 'Redacted';
+  if (el && redactedOn) el.textContent = text;
+}
+
 function renderDrawer(mode) {
   const f = drawerFile;
   if (!f) return;
+  if (mode === 'redacted') redactDrawerSummary(f);
   const meta = f.client_meta ?? {};
   const redacted = meta.redacted_excerpt;
   let excerpt;
@@ -245,7 +264,7 @@ function renderDrawer(mode) {
     h('div', { class: 'chips' }, hasPii(f) && h('span', { class: 'pii', text: '⚠ PII: ' + ((meta.pii_types ?? []).join(', ') || 'personal details') }),
       (f.folders ?? []).map((l) => h('span', { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(), pct(l.score) > 0 && h('b', { text: pct(l.score) + '%' })))),
     h('h3', { text: 'Summary' }),
-    h('p', { class: 'full', text: f.summary || 'No summary available.' }),
+    h('p', { class: 'full', id: 'drawer-summary', text: summaryText(f, mode) }),
     h('h3', { text: 'Text from the file' }),
     seg,
     mode === 'original' ? h('p', { class: 'warn-line', text: 'This is the original text and may contain personal details.' }) : null,
