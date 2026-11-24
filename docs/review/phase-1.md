@@ -294,6 +294,17 @@ Open items from the code reviews. They stay open on purpose; the owner decides o
 - N11: the `_ONLY_NUM_DATE` regex in `extractors.py` contains a stray literal `?` (probably a mangled currency sign), so a line made only of digits and `?` is dropped as "number only".
 - N12: test gaps: no test for text PDF extraction, the 25 MB boundary (only `MAX_FILE_MB=0`), summary sentence choice, the 6-keyword cap, or a custom folder pushing labels past 25 per call.
 
+From the live check with real models (`docs/review/phase-1-verification.md`):
+
+- L1: search relevance is weak in the live run too: "money I spent" gave receipt 100, screenshot 74, invoice 68 (invoice third); "invoice" ranked a voice memo (73) above the invoice PDF (70). There is no minimum cut-off, so unrelated files show 25-42. A relevance issue, not a crash (`search.py`).
+- L2: Needle junk can be accepted as `summary:model` (meeting notes: "Sam owns the API migration digitale migration"). Rejecting summaries with tokens not in the source is not done (`ai_cactus.py`).
+- L3: with models missing, `ai_error` is long and multi-line (the full Hugging Face error, about 700 characters per file). Status is `fallback` and nothing crashes (`ai_cactus.py`, `scanner.py`).
+- L4: adding a folder re-scores every file against the new label set, so existing links can disappear (adding "Audio Memos" dropped both voice memos out of Finance & Receipts). Probably expected; needs a README line (`scanner.py`, reclassify-all).
+- L5: some files have `ai_status=ok` together with `ai_error="needle returned nothing"`, and the provenance suffix is not always shown (`ai_cactus.py`, `build_card`).
+- L6: `/health` `files_present` is a dict for Cactus and a bool for GLiClass (`main.py:79`).
+- L7: on Windows, asyncio opens a socket bound to `0.0.0.0` (an internal socketpair that connects only to 127.0.0.1). It is not a service, but `Get-NetTCPConnection` shows it.
+- L8: the venv `python.exe` is a launcher, so the PID returned by `Start-Process` is not the server PID. Stopping only the launcher can leave the server running; the README stop instructions should say so.
+
 ## Carried forward
 
 - Phase 2: "Powered by Desert Ant Labs" credit linked to https://desertant.com in the sidebar footer; self-host the browser models (`scripts/fetch-browser-models.mjs`, `modelBaseUrl`).
