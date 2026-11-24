@@ -198,21 +198,25 @@ cactus.extract(text, schema, system=None, max_new_tokens=512, weights=None,
   `complete(text)`, reading `function_calls or suppressed_calls`.
 
 **Behaviour (important):** Needle 3 is a 29-121M parameter tool-calling model.
-It copies spans from the input; it does not write summaries. Results on 6
-probes with the schema in `spikes/cactus_spike.py`:
+It copies spans from the input; it does not write summaries. Results with the
+plain schema in `spikes/cactus_spike.py`:
 
 | Input | Result |
 |---|---|
 | invoice | `title "INV-2041"`, `summary` = one copied line, `keywords` = one long span |
 | long meeting notes | `title "Search redesign"`, `summary "ship the search redesign by October"`, 4 good keywords |
 | receipt | title + copied line, keywords include an email address |
-| journal | `None` |
+| journal (long) | `None` |
+| journal (short, in the spike) | `title "Painting"`, `summary "start painting again"`, `keywords ["painting"]` |
 | short meeting notes | `None` |
 | `"zzzz qqqq 1234"` | `title "Qqqq"` (junk accepted) |
 
+The invoice call scored confidence 0.05-0.10 across runs, so it arrived in
+`suppressed_calls`; results are stable per input but the score is not.
+
 Adding `minItems`/`maxItems`/`maxLength` constraints made every probe return
 `None`, so keep the schema plain. Warm call 0.1-0.8 s; first call 11 s
-(download + load).
+(download + load). Probes: 3 in the spike, 6 in a one-off scratch script.
 
 **Phase 1 plan:** merge per field. Use the AI title only if it is 3-80
 characters, the AI summary only if it has at least 20 characters, and split AI
