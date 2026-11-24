@@ -2,7 +2,14 @@
 
 A local, non-destructive virtual file system for Windows. Full README in Phase 4.
 
-PowerShell run commands arrive in Phase 4.
+PowerShell run commands (Phase 1 backend). The full list arrives in Phase 4; the commands with their output are in `docs/review/phase-1.md`.
+
+```powershell
+# from the repo root: download the models once
+backend\.venv\Scripts\python.exe scripts\download_models.py
+# from backend\: start the server (no --reload)
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
 
 ## Network & privacy
 
@@ -10,7 +17,7 @@ File contents, text, summaries and results never leave your machine. These are t
 
 | # | Request | When | Hosts | What |
 |---|---|---|---|---|
-| 1 | Backend model downloads | Once, by `scripts/download_models.py` (arrives in Phase 1) | `huggingface.co`, `us.aws.cdn.hf.co` | Repos `Cactus-Compute/cactus` (engine `libcactus.dll`, 1.9 MB), `Cactus-Compute/needle3` (35.3 MB), `Cactus-Compute/whistle` (16.9 MB), `Cactus-Compute/mirage` (21.6 MB), `knowledgator/gliclass-v4-edge` (882 MB). After that the backend runs with `HF_HUB_OFFLINE=1` and Cactus telemetry off (`CACTUS_TELEMETRY=0`, `DO_NOT_TRACK=1`). |
+| 1 | Backend model downloads | Once, by `scripts/download_models.py` (run it with `backend\.venv\Scripts\python.exe scripts\download_models.py`) | `huggingface.co`, `us.aws.cdn.hf.co` | Repos `Cactus-Compute/cactus` (engine `libcactus.dll`, 1.9 MB), `Cactus-Compute/needle3` (35.3 MB), `Cactus-Compute/whistle` (16.9 MB), `Cactus-Compute/mirage` (21.6 MB), `knowledgator/gliclass-v4-edge` (882 MB). After that the backend runs with `HF_HUB_OFFLINE=1` and Cactus telemetry off (`CACTUS_TELEMETRY=0`, `DO_NOT_TRACK=1`). |
 | 2 | Browser model downloads | When the app first loads a model | `huggingface.co`, `us.aws.cdn.hf.co` | `desert-ant-labs/redact` v0.4.2, `desert-ant-labs/gist` v2.2.0, `desert-ant-labs/emo` v0.7.0. Phase 2 self-hosts them under `frontend/public/models/`, with Hugging Face as the fallback. |
 | 3 | Desert Ant license check | Browser only, when the app loads a Desert Ant model (from Phase 2) | `events.desertant.com` | `POST https://events.desertant.com/api/v1/license` and `/api/v1/activate`. Sends a random install ID, the site domain, the model and its version, the SDK name and version, and the platform (and an API key if one is set; VeilFS sets none). It never sends inputs, outputs or file content. It has no opt-out, and VeilFS does not block, spoof or redirect it (license section 6). If it fails, the model still runs. |
 
