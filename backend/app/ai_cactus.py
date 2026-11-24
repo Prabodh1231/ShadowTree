@@ -105,6 +105,11 @@ def loaded_flags() -> dict:
             "failed": dict(_state["failed"])}
 
 
+def reset_failures() -> None:
+    """Forget cached load failures. Called at each job start so one failure lasts one job."""
+    _state["failed"].clear()
+
+
 def close() -> None:
     """Close the held Needle agent (called on app shutdown)."""
     with MODEL_LOCK:

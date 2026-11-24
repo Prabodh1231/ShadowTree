@@ -308,3 +308,38 @@ def test_c2_cut_summary_ends_with_ellipsis():
     s = ex.cut_text("word " * 200, 300)
     assert len(s) == 300 and s.endswith("\u2026")
     assert ex.cut_text("short", 300) == "short"
+
+
+# ---- N3 (stat path) and N5 (reset per job) -------------------------------------------------
+
+def test_n3_stat_failure_keeps_rows(client, sample_root, monkeypatch):
+    import os
+    run_scan(client, sample_root)
+    assert len(client.get("/files").json()) == 4
+    real = os.scandir
+
+    class Entry:
+        def __init__(self, e):
+            self._e = e
+            self.name, self.path = e.name, e.path
+
+        def stat(self, follow_symlinks=True):
+            if self.name in ("invoice.txt", "sub dir"):
+                raise PermissionError("stat denied (test)")
+            return self._e.stat(follow_symlinks=follow_symlinks)
+
+        def __getattr__(self, n):
+            return getattr(self._e, n)
+    monkeypatch.setattr(os, "scandir", lambda path=".": [Entry(e) for e in real(path)])
+    (sample_root / "shot.png").unlink()
+    st = run_scan(client, sample_root)
+    names = {c["name"] for c in client.get("/files").json()}
+    assert {"invoice.txt", "diary.md"} <= names          # file and subfolder rows stay
+    assert "shot.png" not in names and st["stats"]["removed"] == 1
+
+
+def test_n5_failure_cache_is_cleared_at_job_start(client, sample_root):
+    from app import ai_cactus
+    ai_cactus._state["failed"]["whistle"] = "RuntimeError: earlier job failed"
+    run_scan(client, sample_root)
+    assert ai_cactus._state["failed"] == {}

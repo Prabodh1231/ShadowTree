@@ -8,7 +8,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from . import db, scanner
+from . import ai_cactus, db, scanner
 
 
 class JobRunning(Exception):
@@ -57,6 +57,7 @@ def _run(kind: str, arg) -> None:
     try:
         while True:
             errors: list[str] = _status["errors"]
+            ai_cactus.reset_failures()
             try:
                 if kind == "scan":
                     stats = scanner.scan(arg, _progress, errors)

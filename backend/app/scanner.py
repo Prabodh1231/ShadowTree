@@ -77,6 +77,7 @@ def walk(root: Path, data_dir: Path, errors: list[str],
                     yield p, st
             except OSError as exc:
                 errors.append(f"{p}: {exc}")
+                unreadable.append(p)  # stat/is_dir failed: its rows (or the rows under it) must stay
 
 
 def sha256_file(path: Path) -> str:
