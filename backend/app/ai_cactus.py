@@ -261,12 +261,12 @@ def build_card(path: Path, kind: str, name: str) -> dict:
     summary = ""
     if ai and len(ai["summary"].strip()) >= 20:
         if ex.is_grounded(ai["summary"], text):
-            summary, prov["summary"] = ai["summary"].strip()[:300], "model"
+            summary, prov["summary"] = ex.cut_text(ai["summary"].strip(), 300), "model"
         else:
             prov["summary"] = "fallback(ungrounded)"
     ungrounded = prov["summary"] == "fallback(ungrounded)"  # the model summary was rejected
     if not summary and text and source_model == "mirage":  # keep the OCR lines: they make it searchable
-        summary, prov["summary"] = " | ".join(text.splitlines())[:300], source_model
+        summary, prov["summary"] = ex.cut_text(" | ".join(text.splitlines()), 300), source_model
     elif not summary and text and source_model:
         summary, prov["summary"] = ex.fallback_summary(text), source_model
     if not summary and text:

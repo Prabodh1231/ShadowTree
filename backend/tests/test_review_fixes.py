@@ -291,3 +291,20 @@ def test_n5_whistle_load_error_is_cached(tmp_path, monkeypatch):
         with pytest.raises(Exception):
             ai_cactus.transcribe_audio(tmp_path / "a.wav")
     assert len(calls) == 1 and "weights missing" in ai_cactus._state["failed"]["whistle"]
+
+
+# ---- N11 / C-2 ---------------------------------------------------------------------------------
+
+def test_n11_numeric_lines_with_currency_symbols_are_skipped():
+    from app import extractors as ex
+    assert ex._ONLY_NUM_DATE.match("\u20ac 1,200.00 / \u00a3 30")
+    assert not ex._ONLY_NUM_DATE.match("what? 12")          # no stray '?' in the class
+    text = "\u20ac 1,200.00 \u00a3 3,000.00 1,500.00 1,500.00\nThe team shipped the release on time."
+    assert ex.fallback_summary(text) == "The team shipped the release on time."
+
+
+def test_c2_cut_summary_ends_with_ellipsis():
+    from app import extractors as ex
+    s = ex.cut_text("word " * 200, 300)
+    assert len(s) == 300 and s.endswith("\u2026")
+    assert ex.cut_text("short", 300) == "short"

@@ -104,8 +104,13 @@ will with would you your yours dear please thanks regards hello""".split())
 
 _EMAILISH = re.compile(r"\S+@\S+|\+?\d[\d\-\s().]{6,}\d|https?://\S+|www\.\S+", re.I)
 _WORD = re.compile(r"[A-Za-z][A-Za-z'\-]{2,}")
-_ONLY_NUM_DATE = re.compile(r"^[\d\s\-/.,:;$€£%#()]+$")
+_ONLY_NUM_DATE = re.compile(r"^[\d\s\-/.,:;$\u20ac\u00a3%#()]+$")
 _SENT = re.compile(r"(?<=[.!?])\s+")
+
+
+def cut_text(s: str, limit: int) -> str:
+    """At most `limit` characters; a cut text ends in an ellipsis (C-2)."""
+    return s if len(s) <= limit else s[: limit - 1].rstrip() + "\u2026"
 
 
 def title_from_name(name: str) -> str:
@@ -147,7 +152,7 @@ def fallback_summary(text: str, limit: int = 300) -> str:
         sents = [lines[0]]
     out = " ".join(sents[:2])
     if len(out) > limit:
-        out = out[: limit - 1].rstrip() + "\u2026"
+        out = cut_text(out, limit)
     return out
 
 

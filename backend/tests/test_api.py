@@ -54,10 +54,10 @@ def test_reveal_rejects_unknown_and_paths(client, sample_root, monkeypatch):
     assert client.post("/reveal", json={"path": "C:\\Windows\\notepad.exe"}).status_code == 422
     assert client.post("/reveal", json={"file_id": 1, "path": "x"}).status_code == 422
     assert ran == []
-    fid = client.get("/files").json()[0]["id"]
-    assert client.post("/reveal", json={"file_id": fid}).status_code == 200
+    card = client.get("/files").json()[0]
+    assert client.post("/reveal", json={"file_id": card["id"]}).status_code == 200
     args, kw = ran[0]
-    assert args[0][0] == "explorer" and isinstance(args[0], list) and not kw.get("shell") and not kw.get("check")
+    assert args[0] == ["explorer", "/select,", card["path"]] and not kw.get("shell") and not kw.get("check")
 
 
 def test_below_threshold_goes_to_unsorted(client, sample_root):
