@@ -163,7 +163,7 @@ export async function analyzeFile(fullFile) {
       const g = await withTimeout(models.gist.classify(gistText, { topK: 3 }));
       if (g) {
         answered = true;
-        result.topics = g.map((t) => t.name);
+        result.topics = g.filter((t) => t.score >= 0.5).slice(0, 2).map((t) => t.name);
       }
     }
     return answered ? result : null;

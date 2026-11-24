@@ -68,6 +68,9 @@ async function refresh() {
   state.loading = false;
   renderAll();
 }
+async function refreshCards() {
+  try { state.cards = await api.files(); state.down = false; state.loading = false; renderAll(); } catch { /* the job poll shows a down backend */ }
+}
 async function refreshFolders() {
   try { state.folders = await api.folders(); renderNav(); } catch { /* ignore */ }
 }
@@ -119,7 +122,7 @@ function renderContent() {
   if (state.down) return box.append(downState());
   if (state.loading) return box.append(h('div', { class: 'grid' }, [1, 2, 3, 4, 5, 6].map(() => h('div', { class: 'skeleton' }))));
   if (state.search) return box.append(...searchView());
-  if (!state.cards.length) return box.append(emptyState());
+  if (!state.cards.length) return box.append(state.scanning ? readingState() : emptyState());
   const list = visibleCards();
   if (!list.length) {
     const f = state.folders.find((x) => x.id === state.view);
@@ -143,6 +146,11 @@ function searchView() {
   return [h('div', { class: 'state' }, h('div', { class: 'big', text: '🔍' }),
     h('h2', { text: 'No matches' }),
     h('p', { text: 'Nothing in your index is close to that. Try other words, like “receipt” or “meeting notes”.' }))];
+}
+
+function readingState() {
+  return h('div', { class: 'state' }, h('div', { class: 'big', text: '📖' }), h('h2', { text: 'Reading your files...' }),
+    h('p', { text: 'Files show up here as soon as they are read.' }));
 }
 
 function emptyState() {
@@ -225,7 +233,7 @@ function cardEl(c) {
   cardObjs.set(c.id, c);
   const safe = safeView(c);
   const meta = c.client_meta ?? {};
-  const topics = meta.topics ?? [];
+  const topics = (meta.topics ?? []).slice(0, 2);
   const status = c.ai_status ?? 'fallback';
   const statusText = { ok: 'AI summary: ok', fallback: 'Basic summary (AI was not used for this file)', error: 'AI step failed, basic summary used' }[status] ?? status;
   const m = pct(c.match);
@@ -387,7 +395,10 @@ function pollJob() {
     catch { state.scanning = false; state.down = true; $('progress').hidden = true; setScanBusy(false); renderAll(); return; }
     state.job = s;
     showProgress(s);
-    if (s.state === 'running' || s.state === 'queued') { pollTimer = setTimeout(tick, 600); return; }
+    if (s.state === 'running' || s.state === 'queued') {
+      if (s.kind !== 'reclassify' && Date.now() - (tick.last ?? 0) >= 2000) { tick.last = Date.now(); await refreshCards(); }
+      pollTimer = setTimeout(tick, 600); return;
+    }
     state.scanning = false; setScanBusy(false);
     $('progress').hidden = true;
     if (s.state === 'error') note('The job stopped with an error. Some files may not have been read.', 'err');
