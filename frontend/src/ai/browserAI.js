@@ -99,6 +99,44 @@ export async function redactText(text) {
   }
 }
 
+// Title and keywords that are safe to show for a file flagged as PII.
+// fullFile: the GET /files/{id} body. Drops a keyword when it contains a value
+// Redact found in the excerpt or summary, or when Redact changes it. The title
+// is shown redacted. Null when Redact is not loaded or fails.
+export async function safeLabels(fullFile) {
+  try {
+    await startBrowserAI();
+    if (!models.redact) return null;
+    const run = (t) => withTimeout(models.redact.redaction(t, { minimumConfidence: 0.6 }));
+    const originals = [];
+    for (const t of [fullFile?.text_excerpt, fullFile?.summary]) {
+      if (!t?.trim()) continue;
+      const r = await run(t);
+      if (!r) return null;
+      for (const i of r.items) if (i.original?.trim().length >= 2) originals.push(i.original.trim().toLowerCase());
+    }
+    const title = (fullFile?.title ?? '').trim();
+    let safeTitle = fullFile?.name ?? '';
+    if (title) {
+      const r = await run(title);
+      if (!r) return null;
+      safeTitle = r.redactedText;
+    }
+    const keywords = [];
+    for (const k of fullFile?.keywords ?? []) {
+      const low = String(k).toLowerCase();
+      if (originals.some((o) => low.includes(o))) continue;
+      const r = await run(String(k));
+      if (!r) return null;
+      if (r.redactedText !== String(k)) continue;
+      keywords.push(k);
+    }
+    return { title: safeTitle, keywords };
+  } catch {
+    return null;
+  }
+}
+
 // fullFile: the GET /files/{id} body (text_excerpt, summary). Returns null when
 // no model could answer.
 export async function analyzeFile(fullFile) {

@@ -1,6 +1,6 @@
 import './styles.css';
 import { api, ApiError, API_BASE } from './api.js';
-import { startBrowserAI, suggestEmoji, runPrivacyPass, redactText } from './ai/browserAI.js';
+import { startBrowserAI, suggestEmoji, runPrivacyPass, redactText, safeLabels } from './ai/browserAI.js';
 
 const $ = (id) => document.getElementById(id);
 const START_CMD = 'cd "<repo>\\backend"\n.\\.venv\\Scripts\\Activate.ps1\nuvicorn app.main:app --host 127.0.0.1 --port 8000';
@@ -185,7 +185,39 @@ function cardSummary(c) {
   return cardSummaries.get(key) ?? 'Summary hidden: personal data';
 }
 
+// Title and keywords of PII files: redacted title, filtered keywords. Until the
+// browser AI answers (or when it is off or failed) show the file name and no
+// keywords. Cached per id + sha256; one file is processed at a time.
+const safeCache = new Map(); // key -> {title, keywords} | null
+const cardObjs = new Map();  // id -> latest card object, to redraw after the cache fills
+let safeQueue = Promise.resolve();
+function safeView(c) {
+  if (!hasPii(c)) return { title: c.title || c.name, keywords: c.keywords ?? [] };
+  const key = `${c.id}:${c.sha256}`;
+  if (!safeCache.has(key)) {
+    safeCache.set(key, null);
+    safeQueue = safeQueue.then(async () => {
+      let out = null;
+      try {
+        const full = await api.file(c.id);
+        out = await safeLabels(full);
+      } catch { /* keep the hidden view */ }
+      if (!out) return;
+      safeCache.set(key, out);
+      const cur = cardObjs.get(c.id);
+      if (cur) replaceCard(cur);
+      if (drawerFile?.id === c.id) {
+        const el = $('drawer-title');
+        if (el && document.querySelector('.seg [aria-pressed="true"]')?.textContent === 'Redacted') el.textContent = out.title;
+      }
+    });
+  }
+  return safeCache.get(key) ?? { title: c.name, keywords: [] };
+}
+
 function cardEl(c) {
+  cardObjs.set(c.id, c);
+  const safe = safeView(c);
   const meta = c.client_meta ?? {};
   const topics = meta.topics ?? [];
   const status = c.ai_status ?? 'fallback';
@@ -196,13 +228,13 @@ function cardEl(c) {
   h('div', { class: 'card-top' },
     h('div', { class: 'kind', text: KIND_ICON[c.kind] ?? '📄', title: c.kind }),
     h('div', { style: 'min-width:0;flex:1' },
-      h('h3', { class: 'card-title', text: c.title || c.name }),
+      h('h3', { class: 'card-title', text: safe.title }),
       h('div', { class: 'card-sub' }, h('span', { class: 'dot ' + status, title: statusText, 'aria-label': statusText }), h('span', { text: c.name }))),
     m != null && h('span', { class: 'match', text: m + '%', title: 'How well this matches your search' })),
   h('p', { class: 'card-summary', text: cardSummary(c) }),
-  (c.keywords?.length || topics.length) ? h('div', { class: 'tags' },
+  (safe.keywords.length || topics.length) ? h('div', { class: 'tags' },
     topics.map((t) => h('span', { class: 'tag topic', text: t })),
-    (c.keywords ?? []).slice(0, 5).map((k) => h('span', { class: 'tag', text: k }))) : null,
+    safe.keywords.slice(0, 5).map((k) => h('span', { class: 'tag', text: k }))) : null,
   (c.folders?.length || hasPii(c)) ? h('div', { class: 'chips' },
     hasPii(c) && h('span', { class: 'pii', title: (meta.pii_types ?? []).join(', ') || 'Personal details found', text: '⚠ PII' }),
     (c.folders ?? []).map((l) => h('span', { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(), pct(l.score) > 0 && h('b', { text: pct(l.score) + '%' })))) : null,
@@ -278,7 +310,7 @@ function renderDrawer(mode) {
     h('button', { type: 'button', 'aria-pressed': String(mode === 'original'), text: 'Original', onclick: () => renderDrawer('original') }));
   $('drawer').replaceChildren(...[
     closeBtn(),
-    h('h2', { text: f.title || f.name }),
+    h('h2', { id: 'drawer-title', text: (mode === 'redacted' && hasPii(f)) ? safeView(f).title : (f.title || f.name) }),
     h('div', { class: 'chips' }, hasPii(f) && h('span', { class: 'pii', text: '⚠ PII: ' + ((meta.pii_types ?? []).join(', ') || 'personal details') }),
       (f.folders ?? []).map((l) => h('span', { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(), pct(l.score) > 0 && h('b', { text: pct(l.score) + '%' })))),
     h('h3', { text: 'Summary' }),
