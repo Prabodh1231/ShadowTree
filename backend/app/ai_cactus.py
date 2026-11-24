@@ -179,8 +179,9 @@ def transcribe_audio(path: Path) -> str:
             _state["loaded"].add("whistle")
         except ModelTimeout:
             raise
-        except ImportError as exc:
-            _state["failed"]["whistle"] = f"{type(exc).__name__}: {exc}"
+        except Exception as exc:
+            if "whistle" not in _state["loaded"]:  # never worked: cache the failure (no retry per file)
+                _state["failed"]["whistle"] = f"{type(exc).__name__}: {exc}"
             raise
     return ((res or {}).get("text") or "").strip()
 

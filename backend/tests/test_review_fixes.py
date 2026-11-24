@@ -271,3 +271,23 @@ def test_n10_cactus_needs_the_engine_dll(client):
     (root / "engine" / "4.1.4" / "rev").mkdir(parents=True)
     (root / "engine" / "4.1.4" / "rev" / "libcactus.dll").write_bytes(b"x")
     assert client.get("/health").json()["cactus"]["files_present"]["needle3"] is True
+
+
+# ---- N5: any Whistle load error is cached -------------------------------------------------
+
+def test_n5_whistle_load_error_is_cached(tmp_path, monkeypatch):
+    import sys
+    import types
+    from app import ai_cactus
+    monkeypatch.setenv("VEILFS_DATA_DIR", str(tmp_path / "d"))
+    monkeypatch.setattr(ai_cactus, "_state", {"needle": None, "mirage": None, "failed": {}, "loaded": set()})
+    calls = []
+
+    def transcribe(path, language=None):
+        calls.append(path)
+        raise RuntimeError("weights missing")          # not an ImportError
+    monkeypatch.setitem(sys.modules, "cactus", types.SimpleNamespace(transcribe=transcribe))
+    for _ in range(3):
+        with pytest.raises(Exception):
+            ai_cactus.transcribe_audio(tmp_path / "a.wav")
+    assert len(calls) == 1 and "weights missing" in ai_cactus._state["failed"]["whistle"]
