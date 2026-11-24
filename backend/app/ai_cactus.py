@@ -225,7 +225,8 @@ def build_card(path: Path, kind: str, name: str) -> dict:
 
     # 3. per-field merge
     title = ""
-    if ai and 3 <= len(ai["title"].strip()) <= 80:
+    # Needle copies spans from the Mirage description ("Bar"), so images keep the filename title.
+    if ai and kind != "image" and 3 <= len(ai["title"].strip()) <= 80:
         title, prov["title"] = ai["title"].strip(), "model"
     if not title:
         title = ex.title_from_name(name)
@@ -233,7 +234,9 @@ def build_card(path: Path, kind: str, name: str) -> dict:
     summary = ""
     if ai and len(ai["summary"].strip()) >= 20:
         summary, prov["summary"] = ai["summary"].strip()[:300], "model"
-    if not summary and text and source_model:
+    if not summary and text and source_model == "mirage":  # keep the OCR lines: they make it searchable
+        summary, prov["summary"] = " | ".join(text.splitlines())[:300], source_model
+    elif not summary and text and source_model:
         summary, prov["summary"] = ex.fallback_summary(text), source_model
     if not summary and text:
         summary = ex.fallback_summary(text)

@@ -4,6 +4,7 @@ Final formula (documented in docs/review/phase-1.md):
   score      = raw GLiClass score for the query as the only label (0..1)
   bm25_norm  = 0..1 across the FTS hits (1 = best hit); 0 for non-FTS candidates
   match      = round(100 * (0.7 * score / max(top_score, 0.15) + 0.3 * bm25_norm)), clamped 0..100
+  (no FTS hit at all: weights 1.0 / 0.0, so the best semantic hit shows 100)
   no rerank  = round(100 * bm25_norm), results limited to FTS hits, `rerank: false`
 bm25() is lower-is-better (negative), so it is flipped before normalising.
 """
@@ -77,8 +78,9 @@ def search(conn, q: str) -> dict:
                 ranked.append((i, round(100 * norm[i]), None))
     else:
         top = max(scores.values(), default=0.0)
+        w_score, w_bm25 = (W_SCORE, W_BM25) if norm else (1.0, 0.0)  # no FTS hit: score only
         for i in ids:
-            m = W_SCORE * scores[i] / max(top, TOP_FLOOR) + W_BM25 * norm.get(i, 0.0)
+            m = w_score * scores[i] / max(top, TOP_FLOOR) + w_bm25 * norm.get(i, 0.0)
             ranked.append((i, max(0, min(100, round(100 * m))), scores[i]))
     ranked.sort(key=lambda t: (-t[1], -(t[2] or 0.0)))
     ranked = ranked[:MAX_RESULTS]
