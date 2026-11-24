@@ -1,6 +1,7 @@
 # Phase 1: FastAPI backend
 
-Status: built, 29 pytest tests pass (all models mocked), real offline end-to-end run passed.
+Status: built, 29 pytest tests pass (all models mocked), real offline end-to-end run passed. The commands and trimmed
+output behind both are in [Commands and output](#commands-and-output).
 
 ## What was built
 
@@ -90,6 +91,163 @@ The server was stopped afterwards.
 `/reveal` check (once, by hand, folder with a space and apostrophe): `["explorer", "/select,", path]` as separate list items opened the
 folder with the file selected (read back through Shell.Application: `selected=[invoice]`). The single quoted `"/select,<path>"` argument
 from the spec opened nothing selectable in the same check.
+
+## Commands and output
+
+All commands are PowerShell 5.1 and were run from `C:\Users\prabo\Winter AI` unless noted. Output is trimmed and copied from
+the run; where the raw output was not kept, the line says so.
+
+**1. Install the new dependencies** (from `backend\`). Output tail not kept; `pip check` printed `No broken requirements found.`
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install fastapi uvicorn pypdf pytest httpx soxr
+# Successfully installed certifi-2026.11.20 fastapi-0.165.0 httpcore-1.0.9 httpx-0.28.1 iniconfig-2.3.1
+#   opentelemetry-api-1.45.2 pluggy-1.7.0 pypdf-7.1.1 pytest-9.2.0 soxr-1.1.0 starlette-1.10.0 uvicorn-0.54.0
+.\.venv\Scripts\python.exe -m pip check
+# No broken requirements found.
+```
+
+**2. Download the models** (offline-safe, models were already cached, so it verified):
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\download_models.py 2>$null | Select -Last 14
+# data dir: C:\Users\prabo\Winter AI\backend\data
+# [ok]   Cactus Mirage (image description): 1.0s
+# [ok]   Cactus Whistle (audio transcription): 0.3s
+# [ok]   Cactus Needle 3 (structured extraction): 0.5s
+# [ok]   GLiClass knowledgator/gliclass-v4-edge (no onnx/): 1.4s
+# sizes: cactus cache 76 MB, hugging face cache 965 MB
+# done.
+```
+
+(The shell showed `Exit Code: 1` for that line because of the `Select` pipe; the script's own text says `done.`.)
+
+**3. Tests** (from `backend\`). The first full run stopped at one failing test (a test bug, `json.dumps` escapes backslashes);
+a later run failed once on `test_post_folders_during_running_job` (a failed `INSERT` left a write lock open; fixed with
+`conn.rollback()` in `main.py`). Final runs:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+# .............................                                            [100%]
+# 29 passed in 2.91s
+.\.venv\Scripts\python.exe -m pytest -q          # after commit 3b1c855
+# 29 passed in 2.22s
+```
+
+**4. Make the sample files** in `%TEMP%\veilfs e2e\Bob's messy files` (outside the repo). The text files were written with
+`Set-Content`; the WAV with `System.Speech`; the PNG and the hand-built PDF with a small Python script `%TEMP%\mk.py`
+(Pillow, no new deps) that received the folder as `sys.argv[1]`. No output was printed except the file list:
+
+```powershell
+$d="$env:TEMP\veilfs e2e\Bob's messy files"
+Set-Content "$d\invoice.txt" "Invoice INV-2041 from Northwind Supplies. Billed to billing@example.com, phone +1 555-0142. ..."
+$s.SetOutputToWaveFile("$d\voice memo.wav",$f); $s.Speak("Please pay the electricity invoice of sixty four dollars before Friday.")
+& "C:\Users\prabo\Winter AI\backend\.venv\Scripts\python.exe" "$env:TEMP\mk.py" $d
+Get-ChildItem $d -Recurse | Select Name,Length
+# budget screenshot.png 12838 | invoice.txt 194 | journal.txt 128 | rental agreement.pdf 613 | voice memo.wav 158286
+# sub dir\meeting notes.md 152
+```
+
+**5. Record the "before" state** (SHA-256 of every file, plus size and mtime ticks for every entry). Result files are in
+`%TEMP%\veilfs e2e\` (`before.csv`, `before.txt`); the full text was not pasted into this note.
+
+```powershell
+Get-ChildItem $d -Recurse -File | Get-FileHash | Select Hash,@{n='f';e={Split-Path $_.Path -Leaf}} | Export-Csv "$e\before.csv" -NoTypeInformation
+Get-ChildItem $d -Recurse | % { "$($_.FullName.Substring($d.Length)) $($_.Length) $($_.LastWriteTimeUtc.Ticks)" } | Set-Content "$e\before.txt"
+(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB     # free GB: 3.62  -> float32 (rule: bfloat16 only under 3.5)
+```
+
+**6. Start the server** with its own DB, from `backend\`'s working directory, hidden window, output to files:
+
+```powershell
+$env:VEILFS_DB_PATH="$e\e2e.db"; $env:GLICLASS_DTYPE="float32"     # $e = %TEMP%\veilfs e2e
+Start-Process -FilePath ...\backend\.venv\Scripts\python.exe -ArgumentList "-m","uvicorn","app.main:app","--host","127.0.0.1","--port","8000","--workers","1" `
+  -WorkingDirectory ...\backend -RedirectStandardOutput "$e\server.out" -RedirectStandardError "$e\server.err" -WindowStyle Hidden
+```
+
+The server was started twice: once for a first scan (which showed the image title and ranking problems), and again with a
+fresh DB after commit 3b1c855's changes. The numbers below are from the second run unless noted. `server.out`/`server.err`
+only held model-loading progress bars (not pasted).
+
+**7. `/health` before any scan** (first run's output, same fields in the second):
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health | ConvertTo-Json -Depth 5
+# "status": "ok"
+# "cactus":   { "loaded": false, "files_present": { "needle3": true, "whistle": true, "mirage": true }, "hint": null }
+# "gliclass": { "loaded": false, "files_present": true, "dtype": "float32", "load_error": null, "hint": null }
+# "job": "idle"
+```
+
+After the scan: `{"status":"ok","cactus":{"loaded":true,...},"gliclass":{"loaded":true,...,"dtype":"float32","load_error":null},"job":"done"}`.
+
+**8. Scan and status:**
+
+```powershell
+$b=@{root=$d}|ConvertTo-Json
+Invoke-RestMethod http://127.0.0.1:8000/scan -Method Post -Body $b -ContentType "application/json"
+# {"job_id":1}
+Invoke-RestMethod http://127.0.0.1:8000/scan/status       # polled every 4 s until state != running
+# scan: done {"new":6,"changed":0,"skipped":0,"removed":0} errors=0       (second run; first run: processed 6, total 6)
+```
+
+Rescan (same request): `{"new":0,"changed":0,"skipped":6,"removed":0}`.
+
+**9. Files:** `Invoke-RestMethod http://127.0.0.1:8000/files`. The raw JSON was not kept; the per-file table above in "Real offline run"
+is taken from that response (title, summary, keywords, ai_status, folders with score).
+
+**10. Search** (`$q` was URL-escaped with `[uri]::EscapeDataString`). Raw JSON was not kept; the lines below are the
+formatted output of the second run:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/search?q=money%20I%20spent"
+# q=money I spent rerank=True
+#   rental agreement.pdf score=0.295 match=100
+#   invoice.txt score=0.247 match=84
+#   budget screenshot.png score=0.205 match=69
+#   voice memo.wav score=0.138 match=47
+# q=Northwind rerank=True
+#   invoice.txt score=0.548 match=100
+```
+
+First run (before the no-FTS-hit weighting): top hit was `budget screenshot.png score=0.418 match=70`, invoice `match=41`.
+
+**11. Reveal.** `POST /reveal` with `{"file_id":2}` returned `{"revealed":true}`. The window was read back with
+`Shell.Application` (`LocationURL`, `SelectedItems()`), then closed:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/reveal -Method Post -Body '{"file_id":2}' -ContentType "application/json"
+# API reveal: {"revealed":true}
+# file:///C:/Users/prabo/.kiro/crew/scratch/3abee87d/veilfs%20e2e/Bob's%20messy%20files selected=[invoice]
+Start-Process explorer -ArgumentList "`"/select,$f`""      # the spec's single-argument form
+# (no window under the temp folder was found afterwards)
+```
+
+An earlier attempt with `$id = (... | ? name -eq ...).id` failed in PowerShell (the array unrolled into `[1,2,3,4,5,6]`, so the API
+answered 422); that is a script problem, not an API one.
+
+**12. Snapshot.** `/export/snapshot` was **not** called in the real run. It is covered only by the mocked test
+`test_snapshot_uses_relative_paths` (relative paths, no `text_excerpt`, no absolute path in the output).
+
+**13. Read-only check** (after the server was stopped with `Stop-Process` on the uvicorn processes):
+
+```powershell
+Get-ChildItem $d -Recurse -File | Get-FileHash | ... | Export-Csv "$e\after.csv"
+Get-ChildItem $d -Recurse | % { ... } | Set-Content "$e\after.txt"
+"hash diff: " + (Compare-Object (Get-Content $e\before.csv) (Get-Content $e\after.csv) | Measure-Object).Count
+"listing/size/mtime diff: " + (Compare-Object (Get-Content $e\before.txt) (Get-Content $e\after.txt) | Measure-Object).Count
+# hash diff: 0
+# listing/size/mtime diff: 0
+```
+
+The DB (`e2e.db`, `-wal`, `-shm`) and logs sit in `%TEMP%\veilfs e2e\`, next to the scanned folder, not inside it.
+
+**14. Needle single-field experiment** (output captured to `%TEMP%\needle_exp.txt`):
+
+```powershell
+backend\.venv\Scripts\python.exe spikes\needle_single_field.py 2>$null | Out-String -Width 220 | Set-Content "$env:TEMP\needle_exp.txt"
+# None counts of 6: combined=3, title-only=5, keywords-only=6
+```
 
 ## Deviations from the spec
 
