@@ -184,7 +184,8 @@ def frequency_keywords(text: str, n: int = 6, exclude: set[str] | None = None) -
 
 
 def clean_keywords(ai_keywords: list | None, text: str, limit: int = 6) -> tuple[list[str], str]:
-    """Split long AI spans, drop junk, top up by frequency. Returns (keywords, source)."""
+    """Keep grounded model keywords (<=4 words, <=30 chars), top up by frequency.
+    Returns (keywords, source): model | model+freq | freq | none."""
     out: list[str] = []
     seen: set[str] = set()
     ai_used = False
@@ -202,15 +203,11 @@ def clean_keywords(ai_keywords: list | None, text: str, limit: int = 6) -> tuple
         if not isinstance(span, str):
             continue
         for part in re.split(r"[,;\n]", span):
-            part = part.strip()
-            if not part:
-                continue
-            if len(part.split()) <= 3:
+            part = part.strip(" .,;:!?\"'()[]{}").strip()
+            # Same 90% grounding rule as the title/summary; long spans are dropped, not split.
+            if (part and len(part.split()) <= 4 and len(part) <= 30
+                    and is_grounded(part, text)):
                 add(part, True)
-            else:  # long copied span: keep its content words
-                for w in _WORD.findall(_EMAILISH.sub(" ", part)):
-                    if w.lower() not in STOPWORDS:
-                        add(w.lower(), True)
     n_ai = len(out)
     for w in frequency_keywords(text, limit, exclude=seen):
         add(w, False)
