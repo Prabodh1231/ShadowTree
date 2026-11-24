@@ -1,18 +1,3 @@
-# VeilFS
-
-A local, non-destructive virtual file system for Windows. Full README in Phase 4.
-
-PowerShell run commands (Phase 1 backend). The full list arrives in Phase 4; the commands with their output are in `docs/review/phase-1.md`.
-
-```powershell
-# from the repo root: download the models once
-backend\.venv\Scripts\python.exe scripts\download_models.py
-# from backend\: start the server in the foreground (no --reload). Stop it with Ctrl+C.
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
-# from frontend\, once: fetch the browser models (Desert Ant, about 114 MB) into frontend\public\models\
-cd frontend; npm run fetch-models
-```
-
 ## Network & privacy
 
 File contents, text, summaries and results never leave your machine. These are the only outbound requests VeilFS makes:
