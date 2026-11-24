@@ -162,3 +162,41 @@ def test_n3_unreadable_folder_keeps_its_rows(client, sample_root, monkeypatch):
     assert "diary.md" in names                                # inside the unreadable folder: kept
     assert "shot.png" not in names and st["stats"]["removed"] == 1
     assert any("sub dir" in e and "cannot list" in e for e in st["errors"])
+
+
+# ---- S1: skipped-file counts ---------------------------------------------------------------
+
+def test_s1_skip_counts_with_fake_attributes(client, sample_root, monkeypatch):
+    import os
+    from types import SimpleNamespace
+    (sample_root / "big.txt").write_text("a tiny file that pretends to be huge for the size check")
+    attrs = {"invoice.txt": 0x400000, "diary.md": 0x1000, "voice.wav": 0x400,  # cloud, offline, reparse
+             "shot.png": 0x20}                                # hydrated: archive only
+    real = os.scandir
+
+    class Entry:
+        def __init__(self, e):
+            self._e = e
+            self.name, self.path = e.name, e.path
+
+        def stat(self, follow_symlinks=True):
+            st = self._e.stat(follow_symlinks=follow_symlinks)
+            size = 26 * 1024 * 1024 if self.name == "big.txt" else st.st_size
+            return SimpleNamespace(st_size=size, st_mtime=st.st_mtime,
+                                   st_file_attributes=attrs.get(self.name, 0x20 if self._e.is_file() else 0x10))
+
+        def __getattr__(self, n):
+            return getattr(self._e, n)
+
+    monkeypatch.setattr(os, "scandir", lambda path=".": [Entry(e) for e in real(path)])
+    st = run_scan(client, sample_root)["stats"]
+    assert st["skipped_too_large"] == 1
+    assert st["skipped_cloud_only"] == 2           # 0x400000 and 0x1000
+    assert st["skipped_hidden_or_link"] == 1       # the reparse point is still skipped
+    assert all(isinstance(st[k], int) for k in ("skipped_too_large", "skipped_cloud_only", "skipped_hidden_or_link"))
+    assert {c["name"] for c in client.get("/files").json()} == {"shot.png"}
+
+
+def test_s1_keys_present_without_skips(client, sample_root):
+    st = run_scan(client, sample_root)["stats"]
+    assert (st["skipped_too_large"], st["skipped_cloud_only"], st["skipped_hidden_or_link"]) == (0, 0, 0)

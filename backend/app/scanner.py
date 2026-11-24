@@ -18,6 +18,9 @@ from .config import SKIP_DIR_NAMES, SUPPORTED_EXTS, get_settings, is_inside
 _HIDDEN = getattr(stat_mod, "FILE_ATTRIBUTE_HIDDEN", 0x2)
 _SYSTEM = getattr(stat_mod, "FILE_ATTRIBUTE_SYSTEM", 0x4)
 _REPARSE = getattr(stat_mod, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+# Reading a cloud-only file would trigger a download: RECALL_ON_DATA_ACCESS | OFFLINE. Hydrated files stay in.
+_CLOUD_ONLY = 0x400000 | 0x1000
+SKIP_KEYS = ("skipped_too_large", "skipped_cloud_only", "skipped_hidden_or_link")
 
 
 def _skip_attrs(st: os.stat_result) -> bool:
@@ -26,12 +29,17 @@ def _skip_attrs(st: os.stat_result) -> bool:
 
 
 def walk(root: Path, data_dir: Path, errors: list[str],
-         unreadable: list[Path] | None = None) -> Iterator[tuple[Path, os.stat_result]]:
+         unreadable: list[Path] | None = None,
+         skips: dict | None = None) -> Iterator[tuple[Path, os.stat_result]]:
     """Yield (path, stat) for supported files. Skips hidden/system items, reparse points
     and junctions, node_modules, .git, files over the size limit and the app data dir.
     Paths that failed to list or stat are appended to `unreadable` (their content is unknown)."""
     if unreadable is None:
         unreadable = []
+    if skips is None:
+        skips = {}
+    for k in SKIP_KEYS:
+        skips.setdefault(k, 0)
     max_bytes = get_settings().max_file_bytes
     stack = [root]
     while stack:
@@ -46,14 +54,25 @@ def walk(root: Path, data_dir: Path, errors: list[str],
             p = Path(e.path)
             try:
                 st = e.stat(follow_symlinks=False)
-                if e.is_symlink() or _skip_attrs(st):
+                is_dir = e.is_dir(follow_symlinks=False)
+                counts = is_dir or p.suffix.lower() in SUPPORTED_EXTS  # only count what we would have indexed
+                if not is_dir and getattr(st, "st_file_attributes", 0) & _CLOUD_ONLY:
+                    if counts:
+                        skips["skipped_cloud_only"] += 1
                     continue
-                if e.is_dir(follow_symlinks=False):
+                if e.is_symlink() or _skip_attrs(st):
+                    if counts:
+                        skips["skipped_hidden_or_link"] += 1
+                    continue
+                if is_dir:
                     if e.name.lower() in SKIP_DIR_NAMES or is_inside(p, data_dir):
                         continue
                     stack.append(p)
                 elif e.is_file(follow_symlinks=False):
-                    if p.suffix.lower() not in SUPPORTED_EXTS or st.st_size > max_bytes:
+                    if p.suffix.lower() not in SUPPORTED_EXTS:
+                        continue
+                    if st.st_size > max_bytes:
+                        skips["skipped_too_large"] += 1
                         continue
                     yield p, st
             except OSError as exc:
@@ -119,10 +138,11 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
     conn = db.get_conn()
     root = root.resolve()
     unreadable: list[Path] = []
-    found = list(walk(root, cfg.data_dir, errors, unreadable))
+    skips: dict = {}
+    found = list(walk(root, cfg.data_dir, errors, unreadable, skips))
     progress(total=len(found), processed=0)
     seen: set[str] = set()
-    stats = {"new": 0, "changed": 0, "skipped": 0, "removed": 0}
+    stats = {"new": 0, "changed": 0, "skipped": 0, "removed": 0, **skips}
     folders = classifiable_folders(conn)
 
     for i, (p, st) in enumerate(found, 1):
@@ -208,4 +228,4 @@ def link_new_folders(folder_ids: list[int], progress: Callable[..., None], error
                 errors.append(f"file {r['id']}: classify: {note}")
         set_classify_note(conn, r["id"], note)
         progress(processed=i)
-    return {"reclassified": len(rows), "links_added": added}
+    return {"reclassified": len(rows), "links_added": added, **dict.fromkeys(SKIP_KEYS, 0)}
