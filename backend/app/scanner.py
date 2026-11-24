@@ -5,6 +5,7 @@ Nothing here writes inside the scanned root. Files are opened with open(path, "r
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import stat as stat_mod
 from datetime import datetime, timezone
@@ -162,23 +163,41 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
     return stats
 
 
-def reclassify_all(progress: Callable[..., None], errors: list[str],
-                   should_stop: Callable[[], bool] = lambda: False) -> dict:
-    """Re-link every file from stored title/summary/keywords/excerpt. Never runs Cactus."""
+def link_new_folders(folder_ids: list[int], progress: Callable[..., None], errors: list[str],
+                     should_stop: Callable[[], bool] = lambda: False) -> dict:
+    """Add links for newly created folders only. Every file is scored against the FULL label
+    set (so scores stay calibrated), but only the new folders' links are written. A file that
+    gains a link loses its Unsorted link. All other links stay as they are. Never runs Cactus.
+    A full relink happens only when files are re-indexed by a scan."""
     conn = db.get_conn()
-    folders = classifiable_folders(conn)
+    thr = get_settings().classify_threshold
+    unsorted = db.folder_id(db.UNSORTED)
+    labels = ai_classify.unique_labels(classifiable_folders(conn))
+    new = set(folder_ids)
+    names = [l for _, l in labels]
     rows = conn.execute("SELECT id, title, summary, keywords, text_excerpt FROM files ORDER BY id").fetchall()
     progress(total=len(rows), processed=0)
-    import json
+    added = 0
     for i, r in enumerate(rows, 1):
         if should_stop():
             break
         progress(current_file=r["title"])
-        rec = {"title": r["title"] or "", "summary": r["summary"] or "",
-               "keywords": json.loads(r["keywords"] or "[]"), "text_excerpt": r["text_excerpt"] or ""}
-        note = classify_file(conn, r["id"], folders, rec)
+        text = ai_classify.classifier_text(r["title"] or "", r["summary"] or "",
+                                           json.loads(r["keywords"] or "[]"), r["text_excerpt"] or "")
+        note = ""
+        try:
+            scores = ai_classify.classify(text, names)
+            gained = [(fid, s) for (fid, _), s in zip(labels, scores) if fid in new and s >= thr]
+            if gained:
+                conn.executemany("INSERT OR REPLACE INTO file_folder_links(file_id, folder_id, score) VALUES (?,?,?)",
+                                 [(r["id"], f, s) for f, s in gained])
+                conn.execute("DELETE FROM file_folder_links WHERE file_id=? AND folder_id=?", (r["id"], unsorted))
+                conn.commit()
+                added += len(gained)
+        except Exception as exc:
+            note = f"{type(exc).__name__}: {exc}"
+            if len(errors) < 20:
+                errors.append(f"file {r['id']}: classify: {note}")
         set_classify_note(conn, r["id"], note)
-        if note and len(errors) < 20:
-            errors.append(f"file {r['id']}: classify: {note}")
         progress(processed=i)
-    return {"reclassified": len(rows)}
+    return {"reclassified": len(rows), "links_added": added}
