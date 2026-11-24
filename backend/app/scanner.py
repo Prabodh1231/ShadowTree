@@ -25,9 +25,13 @@ def _skip_attrs(st: os.stat_result) -> bool:
     return bool(attrs & (_HIDDEN | _SYSTEM | _REPARSE))
 
 
-def walk(root: Path, data_dir: Path, errors: list[str]) -> Iterator[tuple[Path, os.stat_result]]:
+def walk(root: Path, data_dir: Path, errors: list[str],
+         unreadable: list[Path] | None = None) -> Iterator[tuple[Path, os.stat_result]]:
     """Yield (path, stat) for supported files. Skips hidden/system items, reparse points
-    and junctions, node_modules, .git, files over the size limit and the app data dir."""
+    and junctions, node_modules, .git, files over the size limit and the app data dir.
+    Paths that failed to list or stat are appended to `unreadable` (their content is unknown)."""
+    if unreadable is None:
+        unreadable = []
     max_bytes = get_settings().max_file_bytes
     stack = [root]
     while stack:
@@ -36,6 +40,7 @@ def walk(root: Path, data_dir: Path, errors: list[str]) -> Iterator[tuple[Path, 
             entries = sorted(os.scandir(d), key=lambda e: e.name.lower())
         except OSError as exc:
             errors.append(f"{d}: cannot list folder: {exc}")
+            unreadable.append(d)
             continue
         for e in entries:
             p = Path(e.path)
@@ -113,7 +118,8 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
     cfg = get_settings()
     conn = db.get_conn()
     root = root.resolve()
-    found = list(walk(root, cfg.data_dir, errors))
+    unreadable: list[Path] = []
+    found = list(walk(root, cfg.data_dir, errors, unreadable))
     progress(total=len(found), processed=0)
     seen: set[str] = set()
     stats = {"new": 0, "changed": 0, "skipped": 0, "removed": 0}
@@ -157,6 +163,8 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
     if not should_stop():
         for r in conn.execute("SELECT id, path FROM files").fetchall():
             n = os.path.normcase(r["path"])
+            if any(is_inside(Path(r["path"]), u) for u in unreadable):
+                continue  # its folder could not be read this time: keep the row (N3)
             if is_inside(Path(r["path"]), root) and n not in seen:
                 db.delete_file(conn, r["id"])  # DB rows only, never the disk
                 stats["removed"] += 1

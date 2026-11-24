@@ -141,3 +141,24 @@ def test_l2_build_card_uses_fallback_for_ungrounded_summary(tmp_path, monkeypatc
     assert "digitale" not in card["summary"] and "Sam owns the API migration" in card["summary"]
     assert "summary:fallback(ungrounded)" in card["ai_error"]
     assert "title:fallback(ungrounded)" in card["ai_error"]      # "Migration meeting" is not in the text either
+
+
+# ---- N3: an unreadable folder must not shrink the index ---------------------------------
+
+def test_n3_unreadable_folder_keeps_its_rows(client, sample_root, monkeypatch):
+    import os
+    run_scan(client, sample_root)
+    assert len(client.get("/files").json()) == 4
+    real = os.scandir
+
+    def flaky(path="."):
+        if os.path.basename(str(path)) == "sub dir":
+            raise PermissionError("denied (test)")
+        return real(path)
+    monkeypatch.setattr(os, "scandir", flaky)
+    (sample_root / "shot.png").unlink()                       # a real removal still happens
+    st = run_scan(client, sample_root)
+    names = {c["name"] for c in client.get("/files").json()}
+    assert "diary.md" in names                                # inside the unreadable folder: kept
+    assert "shot.png" not in names and st["stats"]["removed"] == 1
+    assert any("sub dir" in e and "cannot list" in e for e in st["errors"])
