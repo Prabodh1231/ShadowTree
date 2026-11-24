@@ -1,0 +1,28 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# App data and model caches
+backend/data/
+.cache/
+hf_cache/
+*.safetensors
+*.gguf
+*.onnx
+
+# Node / Vite
+node_modules/
+dist/
+frontend/public/wasm/
+
+# Secrets
+.env
+.env.*
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
