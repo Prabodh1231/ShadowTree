@@ -106,7 +106,7 @@ input::placeholder { color: color-mix(in srgb, var(--ink-2) 75%, transparent); }
 
 /* Cards */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; align-items: start; }
-.grid-label { font: 600 15px var(--serif); color: var(--ink-2); margin: 8px 0 -4px; }
+.grid-label { font: 600 15px var(--serif); color: var(--ink-2); margin: 8px 0 0; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; cursor: pointer; text-align: left; min-width: 0; transition: transform .12s ease, border-color .12s; }
 .card:hover { transform: translateY(-2px); border-color: var(--accent); }
 .card-top { display: flex; gap: 12px; align-items: flex-start; }

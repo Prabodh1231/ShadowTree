@@ -187,7 +187,7 @@ function cardEl(c) {
     (c.keywords ?? []).slice(0, 5).map((k) => h('span', { class: 'tag', text: k }))) : null,
   (c.folders?.length || hasPii(c)) ? h('div', { class: 'chips' },
     hasPii(c) && h('span', { class: 'pii', title: (meta.pii_types ?? []).join(', ') || 'Personal details found', text: '⚠ PII' }),
-    (c.folders ?? []).map((l) => h('span', { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(), pct(l.score) != null && h('b', { text: pct(l.score) + '%' })))) : null,
+    (c.folders ?? []).map((l) => h('span', { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(), pct(l.score) > 0 && h('b', { text: pct(l.score) + '%' })))) : null,
   h('div', { class: 'pathrow' },
     h('div', { class: 'path', title: c.path }, h('span', { text: c.path })),
     h('button', { class: 'btn btn-small', type: 'button', text: 'Copy', title: 'Copy the path', onclick: (e) => { e.stopPropagation(); copyPath(c.path); } })),
@@ -239,11 +239,11 @@ function renderDrawer(mode) {
   const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Which version of the text to show' },
     h('button', { type: 'button', 'aria-pressed': String(mode === 'redacted'), text: 'Redacted', onclick: () => renderDrawer('redacted') }),
     h('button', { type: 'button', 'aria-pressed': String(mode === 'original'), text: 'Original', onclick: () => renderDrawer('original') }));
-  $('drawer').replaceChildren(
+  $('drawer').replaceChildren(...[
     closeBtn(),
     h('h2', { text: f.title || f.name }),
     h('div', { class: 'chips' }, hasPii(f) && h('span', { class: 'pii', text: '⚠ PII: ' + ((meta.pii_types ?? []).join(', ') || 'personal details') }),
-      (f.folders ?? []).map((l) => h('span', { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(), pct(l.score) != null && h('b', { text: pct(l.score) + '%' })))),
+      (f.folders ?? []).map((l) => h('span', { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(), pct(l.score) > 0 && h('b', { text: pct(l.score) + '%' })))),
     h('h3', { text: 'Summary' }),
     h('p', { class: 'full', text: f.summary || 'No summary available.' }),
     h('h3', { text: 'Text from the file' }),
@@ -257,7 +257,7 @@ function renderDrawer(mode) {
       h('dt', { text: 'AI' }), h('dd', { text: { ok: 'Summarised by the AI model', fallback: 'Basic summary (AI not used)', error: 'AI failed, basic summary used' }[f.ai_status] ?? f.ai_status })),
     h('div', { class: 'card-actions' },
       h('button', { class: 'btn btn-small', type: 'button', text: 'Reveal on Disk', onclick: () => reveal(f.id) }),
-      h('button', { class: 'btn btn-small', type: 'button', text: 'Copy path', onclick: () => copyPath(f.path) })));
+      h('button', { class: 'btn btn-small', type: 'button', text: 'Copy path', onclick: () => copyPath(f.path) }))].filter(Boolean));
 }
 
 // ---------- search ----------
