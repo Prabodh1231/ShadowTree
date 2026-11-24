@@ -92,7 +92,7 @@ def health():
         "gliclass": {"loaded": ai_classify.is_loaded(), "files_present": gli_present,
                      "dtype": ai_classify.used_dtype() or get_settings().gliclass_dtype,
                      "load_error": ai_classify.load_error(),
-                     "hint": None if gli_present else hint},
+                     "hint": None if all(gli_present.values()) else hint},
         "job": jobs.status()["state"],
     }
 

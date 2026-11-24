@@ -112,11 +112,15 @@ def classifier_text(title: str, summary: str, keywords: list[str], excerpt: str)
 
 # ---- presence checks (disk only, never load a model) --------------------------------
 
-def gliclass_files_present() -> bool:
+def gliclass_files_present() -> dict:
     d = get_settings().data_dir / "hf" / "hub" / ("models--" + GLICLASS_MODEL_ID.replace("/", "--")) / "snapshots"
-    return d.is_dir() and any(d.glob("*/model.safetensors"))
+    return {GLICLASS_MODEL_ID: d.is_dir() and any(d.glob("*/model.safetensors"))}
 
 
 def cactus_files_present() -> dict:
-    base = get_settings().data_dir / "cache" / "cactus" / "models"
-    return {m: (base / m).is_dir() and any((base / m).rglob("*.cact")) for m in ("needle3", "whistle", "mirage")}
+    """{"<model>": bool}. A Cactus model counts as present only with its weights AND the engine DLL."""
+    cache = get_settings().data_dir / "cache" / "cactus"
+    engine = any((cache / "engine").glob("*/*/libcactus.dll")) if (cache / "engine").is_dir() else False
+    base = cache / "models"
+    return {m: engine and (base / m).is_dir() and any((base / m).rglob("*.cact"))
+            for m in ("needle3", "whistle", "mirage")}

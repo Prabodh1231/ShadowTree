@@ -101,7 +101,7 @@ def _timed(fn):
 
 
 def loaded_flags() -> dict:
-    return {"cactus": bool(_state["loaded"]) or "whistle" in _state["loaded"],
+    return {"cactus": bool(_state["loaded"]),
             "failed": dict(_state["failed"])}
 
 

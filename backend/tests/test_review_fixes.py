@@ -248,3 +248,26 @@ def test_l5_ok_status_has_only_provenance(tmp_path, monkeypatch):
     assert card["ai_status"] == "ok"
     assert card["ai_error"].startswith("title:") and "|" not in card["ai_error"]
     assert "needle empty" in card["ai_error"] and "note:" in card["ai_error"]
+
+
+# ---- L6 / N10: /health files_present has one shape -------------------------------------------
+
+def test_l6_files_present_shape_on_both_stacks(client, monkeypatch):
+    h = client.get("/health").json()
+    for stack in ("cactus", "gliclass"):
+        fp = h[stack]["files_present"]
+        assert fp and all(isinstance(k, str) and isinstance(v, bool) for k, v in fp.items())
+    assert set(h["cactus"]["files_present"]) == {"needle3", "whistle", "mirage"}
+    assert set(h["gliclass"]["files_present"]) == {"knowledgator/gliclass-v4-edge"}
+    assert h["gliclass"]["hint"] and h["cactus"]["hint"]          # nothing downloaded in the test data dir
+
+
+def test_n10_cactus_needs_the_engine_dll(client):
+    from app.config import get_settings
+    root = get_settings().data_dir / "cache" / "cactus"
+    (root / "models" / "needle3").mkdir(parents=True)
+    (root / "models" / "needle3" / "w.cact").write_bytes(b"x")
+    assert client.get("/health").json()["cactus"]["files_present"]["needle3"] is False   # no engine yet
+    (root / "engine" / "4.1.4" / "rev").mkdir(parents=True)
+    (root / "engine" / "4.1.4" / "rev" / "libcactus.dll").write_bytes(b"x")
+    assert client.get("/health").json()["cactus"]["files_present"]["needle3"] is True
