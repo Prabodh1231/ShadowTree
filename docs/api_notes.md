@@ -1,4 +1,4 @@
-# VeilFS API notes (Phase 0, verified)
+﻿# VeilFS API notes (Phase 0, verified)
 
 Every call later phases make to `cactus`, `gliclass`, `@desert-ant-labs/*` and
 `@litertjs/core` must match this file. Everything here was read from the
@@ -12,16 +12,16 @@ headless Microsoft Edge 158.
 
 | Capability | Package / call | Status |
 |---|---|---|
-| Image description | `cactus.Mirage().describe(path)` | ⚠️ works with caveats: no caption field, returns structured JSON |
-| Audio transcription | `cactus.transcribe(path)["text"]` | ✅ works, exactly as the spec assumed (16 kHz WAV) |
-| Structured extraction | `cactus.extract(text, schema)` / `cactus.Cactus(tools=[...])` (Needle 3) | ⚠️ works with caveats: extractive only, often returns `None` |
-| Multi-label folder classification | `gliclass.ZeroShotClassificationPipeline` + `knowledgator/gliclass-v4-edge` | ✅ works on CPU (2.3 GB RAM in float32) |
-| Search rerank | same pipeline, query as the only label | ✅ works |
-| PII redaction (browser) | `Redact.load()` + `redaction(text)` | ⚠️ works; mandatory license check, see [Desert Ant network calls](#network-calls-and-the-license-check) |
-| Topic tags (browser) | `Gist.load()` + `classify(text)` | ⚠️ works; coarse 36-topic taxonomy, license check |
-| Emoji suggestion (browser) | `Emo.load()` + `suggestions(text)` | ⚠️ works; license check |
-| Desert Ant in a module Web Worker | any of the three | ⚠️ works only with an `importScripts` shim. **Decision: run on the main thread, no worker** |
-| Production build (`vite build` + `vite preview`) | all three | ✅ works |
+| Image description | `cactus.Mirage().describe(path)` | âš ï¸ works with caveats: no caption field, returns structured JSON |
+| Audio transcription | `cactus.transcribe(path)["text"]` | âœ… works, exactly as the spec assumed (16 kHz WAV) |
+| Structured extraction | `cactus.extract(text, schema)` / `cactus.Cactus(tools=[...])` (Needle 3) | âš ï¸ works with caveats: extractive only, often returns `None` |
+| Multi-label folder classification | `gliclass.ZeroShotClassificationPipeline` + `knowledgator/gliclass-v4-edge` | âœ… works on CPU (2.3 GB RAM in float32) |
+| Search rerank | same pipeline, query as the only label | âœ… works |
+| PII redaction (browser) | `Redact.load()` + `redaction(text)` | âš ï¸ works; mandatory license check, see [Desert Ant network calls](#network-calls-and-the-license-check) |
+| Topic tags (browser) | `Gist.load()` + `classify(text)` | âš ï¸ works; coarse 36-topic taxonomy, license check |
+| Emoji suggestion (browser) | `Emo.load()` + `suggestions(text)` | âš ï¸ works; license check |
+| Desert Ant in a module Web Worker | any of the three | âš ï¸ works only with an `importScripts` shim. **Decision: run on the main thread, no worker** |
+| Production build (`vite build` + `vite preview`) | all three | âœ… works |
 
 ## Shared setup for the backend (env vars)
 
@@ -67,7 +67,7 @@ Runtime facts that matter for Phase 1:
   `cactus.agent.runtime.lock` (an `RLock`), so calls are serialized across
   threads. Run all Cactus work from the single background job thread.
 - Needle, Whistle and Mirage stay loaded together. Interleaving
-  text → image → audio → text calls works and gives the same results as
+  text â†’ image â†’ audio â†’ text calls works and gives the same results as
   running each alone (checked: 7 interleaved calls, no reload penalty after the
   first).
 - `cactus.set_threads(n)`: CPU threads for models loaded after the call
@@ -151,7 +151,7 @@ whistle.transcribe(audio, language=None, keywords=None, word_timestamps=False) -
   `word_timestamps=True`). Silence returns empty `text`.
 
 Observed: spoken "Please pay the electricity invoice of sixty four dollars
-before Friday." → `"Please pay the electricity invoice of $64 before Friday."`,
+before Friday." â†’ `"Please pay the electricity invoice of $64 before Friday."`,
 `language: "en"`. First call 9.1 s (download + load), cached 0.10-0.24 s.
 
 ### 3. Structured extraction: Needle 3 (`cactus.extract`, `cactus.Cactus`)
@@ -334,7 +334,7 @@ URL GOVERNMENT_ID PASSPORT DRIVERS_LICENSE TAX_ID SSN IMEI ORG`.
 `DEFAULT_LABELS` = all 21 except `ORG`.
 
 Observed: `"Invoice for Jane Doe, 12 Elm Street, Springfield. Contact billing@example.com or +1 555-0142. Card ending 4242. ..."`
-→ `"Invoice for [GIVEN_NAME_1] [SURNAME_1], [BUILDING_NUMBER_1] [STREET_NAME_1], [CITY_1]. Contact [EMAIL_1] or [PHONE_1]. Card ending 4242. ..."`
+â†’ `"Invoice for [GIVEN_NAME_1] [SURNAME_1], [BUILDING_NUMBER_1] [STREET_NAME_1], [CITY_1]. Contact [EMAIL_1] or [PHONE_1]. Card ending 4242. ..."`
 (7 items, `restore()` round-trips). "Card ending 4242" is not flagged.
 Load 7.7-8.9 s (first, with download), call 88-90 ms.
 
@@ -362,9 +362,9 @@ const emo = await Emo.load({ litertWasmDir });
 await emo.suggestions(text, { limit: 3, skinTone: 'default' });  // [{ emoji, confidence }]; '' -> []
 ```
 
-Observed: "Finance & Receipts: invoices, receipts, bills and money spent" →
-🧾 0.40, 💰 0.30, 📄 0.12. "Travel plans: flights, hotels and trips" → ✈ 0.47,
-🏨 0.25, 🗺 0.08. "Personal & Notes: journal and private notes" → 📓 0.27, 📝 0.22, 🗒 0.13.
+Observed: "Finance & Receipts: invoices, receipts, bills and money spent" â†’
+ðŸ§¾ 0.40, ðŸ’° 0.30, ðŸ“„ 0.12. "Travel plans: flights, hotels and trips" â†’ âœˆ 0.47,
+ðŸ¨ 0.25, ðŸ—º 0.08. "Personal & Notes: journal and private notes" â†’ ðŸ““ 0.27, ðŸ“ 0.22, ðŸ—’ 0.13.
 Load 3.2-4.3 s (first), about 5 ms per call.
 
 ### Network calls and the license check
@@ -455,13 +455,34 @@ UI jank.** What follows is the spike evidence.
 - Consequence: a future Content-Security-Policy must allow `'unsafe-eval'` for
   the worker script.
 
-### Self-hosting the models (Phase 2 task, not yet verified)
+### Self-hosting the models (verified in Phase 2)
 
-To avoid the Hugging Face download on every page load, download the files in
-the table above once into `frontend/public/models/<model>/` (gitignored) and
-pass `modelBaseUrl: '/models/<model>/'`. The SDK then fetches
-`<artifact>` + `<sidecars>` as reported by the core's own `modelInfo()`.
-Whether that list matches the files above exactly still has to be checked in
-Phase 2; if self-hosting fails, keep the HF download as the fallback.
-Phase 2 adds `scripts/fetch-browser-models.mjs`, which downloads the pinned
-files into `frontend/public/models/`.
+`frontend/scripts/fetch-browser-models.mjs` (`npm run fetch-models`) downloads
+the files below once into `frontend/public/models/<model>/` (gitignored, 114 MB,
+sizes and LFS sha256 checked against the Hub listing at the pinned tag; a second
+run skips files whose size matches). `browserAI.js` sends a HEAD request for
+`/models/<m>/<m>.tflite` and passes `modelBaseUrl: '/models/<m>/'` when it
+answers with a non-HTML 200, else it uses the default Hugging Face download.
+
+Result: with the files present, `Redact.load`, `Gist.load` and `Emo.load` with
+`modelBaseUrl` all worked (headless Edge, `vite preview`). Total load of the
+three: 3.9 s. **No request went to huggingface.co or the HF CDN.** The only
+requests that left 127.0.0.1 were the license check
+(`POST/OPTIONS events.desertant.com/api/v1/license` and `/activate`).
+
+File list source: `modelInfo()` is internal to the wasm core and not exported,
+so the list is the Phase 0 table of requested files (checked against
+`GET huggingface.co/api/models/desert-ant-labs/<m>/tree/<tag>`), plus
+`labels.json` and `redact_meta.json` for redact. The load working proves the
+list is enough; extra small JSON files may not be needed.
+
+| Model | Tag | Files (bytes) |
+|---|---|---|
+| redact | `v0.4.2` | `redact.tflite` 23929696, `redact_tokenizer.bin` 391416, `labels.json` 3842, `redact_meta.json` 752 |
+| gist | `v2.2.0` | `gist.tflite` 13034484, `gist_embedding.i8` 66905344, `gist_tokenizer.bin` 4625812, `gist_embedding.json` 67, `gist_config.json` 823, `taxonomy.json` 8018 |
+| emo | `v0.7.0` | `emo.tflite` 10222736, `emo_tokenizer.bin` 733197, `emo_meta.json` 6280 |
+
+Deviations from the Phase 0 notes: none in the API. `vite preview` answers
+unknown paths with `index.html` (HTTP 200), so the self-host check must also
+reject `text/html`. `vite build` copies `public/models/` into `dist/` (114 MB;
+the whole build was 292 MB).
