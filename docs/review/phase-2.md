@@ -13,13 +13,13 @@ Backend tests are in `backend/tests/test_review_fixes.py` unless noted.
 | L4 (MUST) | `POST /folders` scores against all labels, writes only the new folder's links, drops Unsorted only for files that gain a link. `scanner.link_new_folders` replaces `reclassify_all` | b0b2db5 | `test_l4_new_folder_keeps_existing_links` |
 | L1 (MUST) | Cut-off 35, `weak` list (top 3, `[]` when results exist), +20 name/title boost, 40 FTS + 20 recent candidates, batches of 16 with the model lock released between batches | bf729e6 | `test_l1_name_boost_rules`, `test_l1_cutoff_weak_and_shape`, `test_l1_invoice_name_boost_ranks_it_first`, `test_l1_candidates_capped_and_batched` |
 | L2 (MUST) | Model title or summary kept only if at least 90% of its tokens (lowercase, length over 2) are in the source text. Else fallback, provenance `summary:fallback(ungrounded)` or `title:fallback(ungrounded)` | 3a69899 | `test_l2_is_grounded_digitale_migration`, `test_l2_build_card_uses_fallback_for_ungrounded_summary` |
-| N3 (MUST) | Folders that failed to list or stat are tracked. The "removed" step skips DB paths inside them | 13fa41d | `test_n3_unreadable_folder_keeps_its_rows` (monkeypatched `os.scandir`) |
+| N3 (MUST) | Folders that failed to list are tracked, and the "removed" step skips DB paths inside them (13fa41d). **Half done at first:** the review (`phase2-r1-backend-review.md`) found that a failed `stat()` or `is_dir()` was logged but not tracked, so those rows were still deleted. The edit had been written but did not apply. Fixed: such paths now go to `unreadable` too | 13fa41d, fix 87e3bf3 | `test_n3_unreadable_folder_keeps_its_rows` (monkeypatched `os.scandir`); `test_n3_stat_failure_keeps_rows` (`DirEntry.stat` raises for one file and one folder; both keep their rows, a deleted file is still removed) |
 | S1 | `skipped_too_large`, `skipped_cloud_only`, `skipped_hidden_or_link` always in scan stats as ints. Cloud-only means attribute `0x400000` or `0x1000` only | 6887240 | `test_s1_skip_counts_with_fake_attributes`, `test_s1_keys_present_without_skips` |
 | N2 | `scan_root` is written only after `start_scan` succeeds | 1cc6deb | `test_n2_refused_scan_does_not_change_scan_root` |
 | L3 | `ai_error` is one line, at most 200 chars, cut text ends in an ellipsis, provenance suffix kept | 04a8d1a | `test_l3_ai_error_is_one_short_line` |
 | L5 | Status `ok` keeps only provenance in `ai_error`. Side notes become `note:...` tokens | 04a8d1a | `test_l5_ok_status_has_only_provenance` |
 | L6 / N10 | `/health` `files_present` is `{"<model>": bool}` on both stacks. Cactus models need the weights and `libcactus.dll`. Dead `or "whistle" in loaded` clause removed | 9718ff0 | `test_l6_files_present_shape_on_both_stacks`, `test_n10_cactus_needs_the_engine_dll` |
-| N5 | Any Whistle load error is cached (Mirage already cached any load error) | a926ab6 | `test_n5_whistle_load_error_is_cached` |
+| N5 | Any Whistle load error is cached for the rest of a job (Mirage already cached any load error). The review noted the cache never reset, so one bad audio file disabled Whistle until restart. Fixed: `ai_cactus.reset_failures()` runs at the start of every job. GLiClass' own load-error cache is not reset | a926ab6, fix 87e3bf3 | `test_n5_whistle_load_error_is_cached`; `test_n5_failure_cache_is_cleared_at_job_start` |
 | N7 | Test asserts the full `["explorer", "/select,", path]` list | 1be9497 | `test_api.py::test_reveal_rejects_unknown_and_paths` |
 | N11 | `_ONLY_NUM_DATE` uses `\u20ac\u00a3` escapes. The file had no stray `?`; it was a console encoding artefact, the escapes make it encoding-proof | 1be9497 | `test_n11_numeric_lines_with_currency_symbols_are_skipped` |
 | C-2 | Cut summaries end in an ellipsis (`extractors.cut_text`) | 1be9497 | `test_c2_cut_summary_ends_with_ellipsis` |
@@ -59,7 +59,7 @@ By spec feature (UI commits a7889fa, 24179a5, 93e6963):
 
 All output copied from the round reports (`phase2-r1-backend.md`, `phase2-r1-ui.md`, `phase2-r1-browser-ai.md`). Nothing re-typed from memory.
 
-Backend tests (`<repo>\backend`):
+Backend tests (`<repo>\backend`), first run after the round 1 fixes (the N3 and N5 fixes below bring it to 50 passed in 3.73s):
 
 ```
 .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
