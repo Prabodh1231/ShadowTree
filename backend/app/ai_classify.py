@@ -1,8 +1,8 @@
-"""Folder classification and search rerank seam (Steps 2 and 3 fill it in).
+"""Folder classification (DeBERTa NLI) and search rerank (FlashRank).
 
-Step 1 removed GLiClass and torch. `classify` raises `NotReady` until DeBERTa (Step 3) is
-wired: the scanner catches that and puts the file in Unsorted. `rerank` is FlashRank (Step 2)
-and raises `NotReady` only when its model folder is missing; search then falls back to cosine
+`classify` runs the DeBERTa ONNX model and raises `NotReady` only when its model folder is
+missing: the scanner catches that and puts the file in Unsorted. `rerank` is FlashRank and
+raises `NotReady` only when its model folder is missing; search then falls back to cosine
 order. The names below are the seam the tests monkeypatch.
 """
 from __future__ import annotations
