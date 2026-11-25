@@ -4,6 +4,10 @@
 
 ShadowTree reads a messy folder, uses AI that runs on your own PC to describe and sort each file, and shows the files in clean virtual folders. Nothing is moved, renamed, written or deleted on disk.
 
+![ShadowTree's gallery view: virtual folders on the left, a redacted invoice in the middle, its details on the right and a filmstrip of the other files below](docs/gallery-view.png)
+
+*The gallery view on the sample folder. Redacted mode hides the names, address, email and phone number in the invoice.*
+
 ## The problem
 
 Downloads folders fill up with files named `scan0042.pdf` and `Screenshot 2026-11-20.png`. Tidying them by hand takes hours. Cloud tools sort them well, but they upload your invoices, notes and IDs.
