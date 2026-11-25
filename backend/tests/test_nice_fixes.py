@@ -62,3 +62,30 @@ def test_8_wrong_length_vector_is_skipped(client, sample_root):
     assert did not in out and len(out) == 3
     r = client.get("/search", params={"q": "diary lake"})
     assert r.status_code == 200 and r.json()["results"][0]["name"] == "diary.md"   # still found by text
+
+
+def test_live6_ocr_ok_drops_mirage_text_lines(tmp_path, monkeypatch):
+    """Live check finding 6: with OCR text, Mirage adds only its visual description."""
+    from PIL import Image
+    from app import ai_cactus
+
+    out = {"scene": {"style": "digital interface"}, "regions": [{"name": "red button"}],
+           "text": [{"string": "Error code Ox80070005"}, {"string": "ot save your invoice."}]}
+
+    class FakeMirage:
+        def describe(self, path):
+            return out
+    monkeypatch.setattr(ai_cactus, "_get", lambda name: FakeMirage())
+    monkeypatch.setattr(ai_cactus, "structured", lambda t: None)
+    f = tmp_path / "shot.png"
+    Image.new("RGB", (40, 30)).save(f)
+
+    monkeypatch.setattr(ai_ocr, "ocr_image", lambda data: ["Error code 0x80070005: access denied."])
+    ex = ai_cactus.build_card(f, "image", f.name)["text_excerpt"]
+    assert ex.startswith("Text in the image:\nError code 0x80070005: access denied.\n\nImage description:\n")
+    assert "digital interface image" in ex and "red button" in ex
+    assert "Ox80070005" not in ex and "ot save" not in ex
+
+    monkeypatch.setattr(ai_ocr, "ocr_image", lambda data: [])          # OCR empty: Mirage text kept
+    ex = ai_cactus.build_card(f, "image", f.name)["text_excerpt"]
+    assert "Ox80070005" in ex and "Text in the image" not in ex

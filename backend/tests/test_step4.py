@@ -32,7 +32,7 @@ def test_image_ocr_runs_before_mirage_and_leads_the_text(client, sample_root, ca
     order = []
     monkeypatch.setattr(ai_ocr, "ocr_image", lambda data: order.append("ocr") or ["Payment failed", "Retry"])
     real = ai_cactus.describe_image
-    monkeypatch.setattr(ai_cactus, "describe_image", lambda p: order.append("mirage") or real(p))
+    monkeypatch.setattr(ai_cactus, "describe_image", lambda p, **kw: order.append("mirage") or real(p, **kw))
     run_scan(client, sample_root)
     assert order == ["ocr", "mirage"]
     card = client.get(f"/files/{next(c['id'] for c in client.get('/files').json() if c['name'] == 'shot.png')}").json()

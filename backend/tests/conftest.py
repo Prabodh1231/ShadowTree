@@ -55,7 +55,7 @@ def calls(monkeypatch):
         first = text.strip().splitlines()[0][:40] if text.strip() else "Doc"
         return {"title": first, "summary": "A model written summary of the file text.", "keywords": ["alpha", "beta"]}
 
-    def describe(path):
+    def describe(path, with_text=True):
         c.describe += 1
         return "screenshot image\nMonthly Budget\nGroceries $120.50"
 

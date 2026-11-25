@@ -148,7 +148,7 @@ def structured(text: str) -> dict | None:
     }
 
 
-def describe_image(path: Path) -> str:
+def describe_image(path: Path, with_text: bool = True) -> str:
     """Mirage: OCR lines + scene.style + region names. Reasoning fragments are dropped
     when they say the text could not be read."""
     with MODEL_LOCK:
@@ -170,7 +170,7 @@ def describe_image(path: Path) -> str:
     text = ". ".join(parts)
     if frags:
         text += (". " if text else "") + frags[0]
-    if lines:
+    if lines and with_text:  # with_text=False: OCR already has the verbatim text
         text += ("\n" if text else "") + "\n".join(lines)
     return text.strip()
 
@@ -265,7 +265,8 @@ def build_card(path: Path, kind: str, name: str) -> dict:
                 ocr_state = _ocr_failed(exc, notes)
             desc = ""
             try:  # 2. Mirage: the visual description
-                desc = describe_image(path)
+                # OCR read the text: keep only Mirage's visual description (its own text copy has errors)
+                desc = describe_image(path, with_text=False) if ocr_lines else describe_image(path)
                 if not desc:
                     notes.append("image model returned nothing")
             except Exception as exc:

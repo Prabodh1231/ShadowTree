@@ -242,7 +242,7 @@ def test_l5_ok_status_has_only_provenance(tmp_path, monkeypatch):
     from app import ai_cactus
     f = tmp_path / "shot.png"
     Image.new("RGB", (40, 30), (1, 2, 3)).save(f)
-    monkeypatch.setattr(ai_cactus, "describe_image", lambda p: "Monthly Budget\nGroceries $120.50 today")
+    monkeypatch.setattr(ai_cactus, "describe_image", lambda p, with_text=True: "Monthly Budget\nGroceries $120.50 today")
     monkeypatch.setattr(ai_cactus, "structured", lambda t: None)
     card = ai_cactus.build_card(f, "image", f.name)
     assert card["ai_status"] == "ok"
