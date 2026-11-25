@@ -35,11 +35,10 @@ function withTimeout(promise, ms = TIMEOUT_MS) {
 // text/html type does not count.
 async function selfHosted(name) {
   try {
-    // GET, not HEAD: the Tauri asset protocol answers HEAD with the index.html fallback.
-    // The headers are enough; the body is dropped right away.
-    const ctl = new AbortController();
-    const r = await withTimeout(fetch(`/models/${name}/${name}.tflite`, { signal: ctl.signal }), 5000);
-    ctl.abort();
+    // A small JSON file stands in for the model: the Tauri asset protocol labels .tflite as
+    // text/html and answers HEAD with the index.html fallback, while .json is typed correctly.
+    const probe = { redact: 'labels.json', gist: 'taxonomy.json', emo: 'emo_meta.json' }[name] ?? `${name}.tflite`;
+    const r = await withTimeout(fetch(`/models/${name}/${probe}`), 5000);
     return !!r && r.ok && !(r.headers.get('content-type') || '').includes('text/html');
   } catch {
     return false;
