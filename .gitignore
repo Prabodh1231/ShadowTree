@@ -36,3 +36,7 @@ demo-video/
 
 # Build and review reports
 reports/
+
+# Tauri
+frontend/src-tauri/target/
+frontend/src-tauri/gen/

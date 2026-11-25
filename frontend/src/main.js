@@ -1,6 +1,7 @@
 import './styles.css';
 import { api, ApiError, API_BASE } from './api.js';
 import { startBrowserAI, suggestEmoji, runPrivacyPass, redactText, safeLabels, browserAIOff } from './ai/browserAI.js';
+import { inTauri, waitForBackend, pickFolderNative, listenNativeDrop } from './desktop.js';
 
 const $ = (id) => document.getElementById(id);
 const START_CMD = 'cd "<repo>\\backend"\n.\\.venv\\Scripts\\Activate.ps1\nuvicorn app.main:app --host 127.0.0.1 --port 8000';
@@ -188,7 +189,9 @@ async function chooseFolder() {
   const btn = $('pick-btn'); const label = btn.textContent;
   btn.disabled = true; btn.textContent = 'Pick a folder in the window…';
   try {
-    const r = await api.pickFolder($('root').value.trim() || null);
+    const r = inTauri
+      ? { path: await pickFolderNative($('root').value.trim() || null) }
+      : await api.pickFolder($('root').value.trim() || null);
     if (r.path) { $('root').value = r.path; startScan(); }
   } catch (err) {
     if (err.status === 0) { state.down = true; renderAll(); }
@@ -572,4 +575,10 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawe
 try { $('root').value = localStorage.getItem('veilfs-root') ?? ''; } catch { /* ignore */ }
 applyThemeLabel();
 renderAll();
-refresh().then(async () => { if (!state.down) { await resumeIfRunning(); } startAI(); });
+waitForBackend().then(() => refresh()).then(async () => { if (!state.down) { await resumeIfRunning(); } startAI(); });
+// Desktop window: real dropped paths (the browser drop handler above stays for browsers).
+listenNativeDrop({
+  onOver: () => document.body.classList.add('dropping'),
+  onLeave: () => document.body.classList.remove('dropping'),
+  onDrop: (dir) => { if (state.scanning) return toast('A job is already running. Wait for it to finish.'); $('root').value = dir; startScan(); },
+}).catch((e) => console.warn('native drop unavailable', e));

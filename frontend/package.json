@@ -10,9 +10,11 @@
     "prebuild": "node scripts/copy-litert-wasm.mjs",
     "build": "vite build",
     "preview": "vite preview",
-    "fetch-models": "node scripts/fetch-browser-models.mjs"
+    "fetch-models": "node scripts/fetch-browser-models.mjs",
+    "tauri": "tauri"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.6",
     "vite": "8.3.8"
   },
   "dependencies": {
