@@ -1,3 +1,5 @@
+> **Note (2026-11-25):** The model stack changed after this spec was written. GLiClass, PyTorch and transformers are gone. Folder sorting uses DeBERTa (ONNX), search uses potion and FlashRank, OCR uses RapidOCR, and the app runs in a Tauri window. See [docs/review/shadowtree-plan.md](review/shadowtree-plan.md). The text below is the original spec.
+
 # Build prompt for Kiro
 
 > Paste everything below the line into Kiro (Spec mode). Working title is **VeilFS**, so rename it freely.
