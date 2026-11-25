@@ -60,9 +60,9 @@ def calls(monkeypatch):
         t = text.lower()
         out = []
         for l in labels:
-            if "invoices" in l and "invoice" in t:
+            if "Finance" in l and "invoice" in t:
                 out.append(0.9)
-            elif "journal" in l and "diary" in t:
+            elif "Personal" in l and "diary" in t:
                 out.append(0.8)
             else:
                 out.append(0.1)

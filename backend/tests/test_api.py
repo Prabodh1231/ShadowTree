@@ -63,7 +63,7 @@ def test_reveal_rejects_unknown_and_paths(client, sample_root, monkeypatch):
 def test_below_threshold_goes_to_unsorted(client, sample_root):
     run_scan(client, sample_root)
     cards = {c["name"]: c for c in client.get("/files").json()}
-    assert [f["name"] for f in cards["shot.png"]["folders"]] == ["Unsorted"]
+    assert [f["name"] for f in cards["shot.png"]["folders"]] == ["Screenshots & Media"]   # by file type only
     assert "Finance & Receipts" in [f["name"] for f in cards["invoice.txt"]["folders"]]
 
 

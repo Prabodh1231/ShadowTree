@@ -26,6 +26,7 @@ DEBERTA_FILES = ["onnx/model_quantized.onnx", "tokenizer.json", "config.json"]
 POTION_REPO = "minishlab/potion-base-8M"
 POTION_FILES = ["config.json", "model.safetensors", "tokenizer.json"]
 FLASHRANK_MODEL = "ms-marco-TinyBERT-L-2-v2"
+CLASSIFIER_VERSION = "deberta-xsmall-v1"  # stamped on files.cls_ver; older or missing means re-link
 SUPPORTED_EXTS = {".txt": "text", ".md": "text", ".pdf": "pdf", ".png": "image",
                   ".jpg": "image", ".jpeg": "image", ".wav": "audio"}
 SKIP_DIR_NAMES = {"node_modules", ".git"}
@@ -50,6 +51,7 @@ class Settings:
     data_dir: Path
     db_path: Path
     classify_threshold: float
+    newfolder_cosine: float        # new-folder pre-filter: potion cosine a file needs before DeBERTa scores it
     max_file_bytes: int
     pdf_max_pages: int
     onnx_threads: int              # onnxruntime intra-op threads, about half the cores
@@ -66,6 +68,7 @@ def get_settings() -> Settings:
         data_dir=data_dir,
         db_path=db_path,
         classify_threshold=_float("CLASSIFY_THRESHOLD", 0.5),
+        newfolder_cosine=_float("NEWFOLDER_COSINE", 0.30),
         max_file_bytes=_int("MAX_FILE_MB", 25) * 1024 * 1024,
         pdf_max_pages=_int("PDF_MAX_PAGES", 10),
         onnx_threads=_int("ONNX_THREADS", max(1, (os.cpu_count() or 2) // 2)),

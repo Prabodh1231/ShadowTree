@@ -38,7 +38,8 @@ def test_l4_new_folder_keeps_existing_links(client, sample_root, monkeypatch):
     assert client.patch(f"/files/{inv['id']}/client-meta",
                         json={"sha256": inv["sha256"], "has_pii": True}).status_code == 200
     before = _links(client)
-    assert ("shot.png", "Unsorted") in before and ("invoice.txt", "Finance & Receipts") in before
+    assert ("shot.png", "Screenshots & Media") in before and ("invoice.txt", "Finance & Receipts") in before
+    monkeypatch.setenv("NEWFOLDER_COSINE", "-1")   # L4 is about which links get written: no pre-filter here
     real = ai_classify.classify
 
     def relative(text, labels):
@@ -52,8 +53,7 @@ def test_l4_new_folder_keeps_existing_links(client, sample_root, monkeypatch):
     fid = client.post("/folders", json={"name": "Lake", "description": "lake photos"}).json()["folder_id"]
     assert jobs.wait_idle(60)
     after = _links(client)
-    assert (before - {("shot.png", "Unsorted")}) <= after            # nothing else was removed
-    assert ("shot.png", "Unsorted") not in after                     # gained a link: Unsorted goes
+    assert before <= after                                           # nothing was removed
     assert ("shot.png", "Lake") in after and ("invoice.txt", "Lake") in after
     assert ("diary.md", "Personal & Notes") in after and ("diary.md", "Lake") not in after
     inv_folders = {f["name"] for f in _inv(client)["folders"]}

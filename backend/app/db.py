@@ -50,15 +50,23 @@ CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
 
 UNSORTED = "Unsorted"
 SENSITIVE = "Sensitive (PII)"
+MEDIA = "Screenshots & Media"  # decided by file type (image or audio), never by the classifier
 
 SEED_FOLDERS = [
-    ("Finance & Receipts", "\U0001F9FE", "invoices, receipts, bills, payments and money spent", "default"),
-    ("Work & Research", "\U0001F4BC", "work documents, meeting notes, projects and research", "default"),
-    ("Personal & Notes", "\U0001F4D3", "personal journal, diary, feelings and private notes", "default"),
+    # Descriptions are the NLI hypothesis "This text is about {name}: {description}." Short "or"
+    # lists score far better with DeBERTa than long lists (see reports/shadowtree/step3.md).
+    ("Finance & Receipts", "\U0001F9FE", "money, payments, bills or receipts", "default"),
+    ("Work & Research", "\U0001F4BC", "work or research, such as meeting notes or research questions", "default"),
+    ("Personal & Notes", "\U0001F4D3", "personal life, feelings or a diary", "default"),
     ("Screenshots & Media", "\U0001F5BC\uFE0F", "screenshots, images, photos, audio recordings and media", "default"),
     (UNSORTED, "\U0001F4E5", "Files that match no folder", "smart"),
     (SENSITIVE, "\U0001F512", "Files with personal data, computed from the privacy scan", "smart"),
 ]
+OLD_SEED_DESCRIPTIONS = {  # Phase 1 text, replaced on start only if the user did not change it
+    "Finance & Receipts": "invoices, receipts, bills, payments and money spent",
+    "Work & Research": "work documents, meeting notes, projects and research",
+    "Personal & Notes": "personal journal, diary, feelings and private notes",
+}
 
 _local = threading.local()
 
@@ -101,6 +109,8 @@ def migrate(conn: sqlite3.Connection) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(files)")}
     if "vec" not in cols:
         conn.execute("ALTER TABLE files ADD COLUMN vec BLOB")  # float32 potion vector, 256 * 4 bytes
+    if "cls_ver" not in cols:
+        conn.execute("ALTER TABLE files ADD COLUMN cls_ver TEXT")  # classifier version that wrote the links
     conn.commit()
 
 
@@ -112,6 +122,9 @@ def init_db() -> None:
         conn.execute(
             "INSERT OR IGNORE INTO virtual_folders(name, emoji, description, kind) VALUES (?,?,?,?)",
             (name, emoji, desc, kind))
+    for name, old in OLD_SEED_DESCRIPTIONS.items():  # Step 3 re-tuned these for DeBERTa; keep user edits
+        new = next(d for n, _, d, _ in SEED_FOLDERS if n == name)
+        conn.execute("UPDATE virtual_folders SET description=? WHERE name=? AND description=?", (new, name, old))
     conn.commit()
 
 

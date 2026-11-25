@@ -12,14 +12,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterator
 
-from . import ai_cactus, ai_classify, db, vectors
-from .config import SKIP_DIR_NAMES, SUPPORTED_EXTS, get_settings, is_inside
+import numpy as np
+
+from . import ai_cactus, ai_classify, ai_embed, db, vectors
+from .config import CLASSIFIER_VERSION, SKIP_DIR_NAMES, SUPPORTED_EXTS, get_settings, is_inside
 
 _HIDDEN = getattr(stat_mod, "FILE_ATTRIBUTE_HIDDEN", 0x2)
 _SYSTEM = getattr(stat_mod, "FILE_ATTRIBUTE_SYSTEM", 0x4)
 _REPARSE = getattr(stat_mod, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 # Reading a cloud-only file would trigger a download: RECALL_ON_DATA_ACCESS | OFFLINE. Hydrated files stay in.
 _CLOUD_ONLY = 0x400000 | 0x1000
+MEDIA_KINDS = ("image", "audio")  # these always join Screenshots & Media
 SKIP_KEYS = ("skipped_too_large", "skipped_cloud_only", "skipped_hidden_or_link")
 
 
@@ -93,27 +96,59 @@ def _now() -> str:
 
 
 def classify_file(conn, file_id: int, folders: list, rec: dict) -> str:
-    """Link the file to every folder scoring >= threshold, else Unsorted.
-    Returns an error note ('' when fine). Never raises."""
+    """Link the file to every topic folder scoring >= threshold, else Unsorted.
+    Screenshots & Media is decided by file type (image or audio), not by the classifier.
+    Returns an error note ('' when fine) and stamps files.cls_ver on success. Never raises."""
     thr = get_settings().classify_threshold
     unsorted = db.folder_id(db.UNSORTED)
+    media = db.folder_id(db.MEDIA)
     links: list[tuple[int, float]] = []
     note = ""
-    if folders:
-        labels = ai_classify.unique_labels(folders)
+    topics = [f for f in folders if f[0] != media]
+    if topics:
+        labels = ai_classify.unique_labels(topics)
         text = ai_classify.classifier_text(rec["title"], rec["summary"], rec["keywords"], rec["text_excerpt"])
         try:
             scores = ai_classify.classify(text, [l for _, l in labels])
             links = [(fid, s) for (fid, _), s in zip(labels, scores) if s >= thr]
         except Exception as exc:
             note = f"{type(exc).__name__}: {exc}"
+    if rec.get("kind") in MEDIA_KINDS:
+        links.append((media, 1.0))
     if not links:
         links = [(unsorted, 0.0)]
     conn.execute("DELETE FROM file_folder_links WHERE file_id=?", (file_id,))
     conn.executemany("INSERT INTO file_folder_links(file_id, folder_id, score) VALUES (?,?,?)",
                      [(file_id, f, s) for f, s in links])
+    conn.execute("UPDATE files SET cls_ver=? WHERE id=?", (None if note else CLASSIFIER_VERSION, file_id))
     conn.commit()
     return note
+
+
+def relink_stale(conn, folders: list, progress: Callable[..., None], errors: list[str],
+                 should_stop: Callable[[], bool] = lambda: False) -> int:
+    """Re-link files whose links came from an older classifier (e.g. GLiClass), using the stored
+    text only: no hashing, no Cactus. If the classifier is not ready the old links are kept."""
+    rows = conn.execute("SELECT * FROM files WHERE cls_ver IS NOT ? ORDER BY id", (CLASSIFIER_VERSION,)).fetchall()
+    done = 0
+    for r in rows:
+        if should_stop():
+            break
+        rec = {"title": r["title"] or "", "summary": r["summary"] or "", "keywords": json.loads(r["keywords"] or "[]"),
+               "text_excerpt": r["text_excerpt"] or "", "kind": r["kind"]}
+        progress(current_file=r["name"])
+        saved = conn.execute("SELECT folder_id, score FROM file_folder_links WHERE file_id=?", (r["id"],)).fetchall()
+        note = classify_file(conn, r["id"], folders, rec)
+        if note:  # classifier unavailable: put the old links back and try again on the next scan
+            conn.execute("DELETE FROM file_folder_links WHERE file_id=?", (r["id"],))
+            conn.executemany("INSERT INTO file_folder_links(file_id, folder_id, score) VALUES (?,?,?)",
+                             [(r["id"], s["folder_id"], s["score"]) for s in saved])
+            conn.commit()
+            if len(errors) < 20:
+                errors.append(f"file {r['id']}: re-link skipped: {note}")
+            break  # the same error would repeat for every file
+        done += 1
+    return done
 
 
 def classifiable_folders(conn) -> list[tuple[int, str, str | None]]:
@@ -186,6 +221,7 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
         progress(processed=i)
 
     if not should_stop():
+        relink_stale(conn, folders, progress, errors, should_stop)  # links from an older classifier
         vectors.embed_missing(conn)  # rows still without a vector (old DBs, failed embeds)
         for r in conn.execute("SELECT id, path FROM files").fetchall():
             n = os.path.normcase(r["path"])
@@ -199,39 +235,55 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
 
 def link_new_folders(folder_ids: list[int], progress: Callable[..., None], errors: list[str],
                      should_stop: Callable[[], bool] = lambda: False) -> dict:
-    """Add links for newly created folders only. Every file is scored against the FULL label
-    set (so scores stay calibrated), but only the new folders' links are written. A file that
-    gains a link loses its Unsorted link. All other links stay as they are. Never runs Cactus.
-    A full relink happens only when files are re-indexed by a scan."""
+    """Add links for newly created folders only (L4). Pre-filter: embed name + description with
+    potion and keep files whose stored vector has cosine >= NEWFOLDER_COSINE (files without a
+    vector, or no potion at all, skip the pre-filter). Only those files are scored by DeBERTa,
+    against the new folders' hypotheses; the new links are written, a file that gains a link
+    loses its Unsorted link, and every other link stays. Never runs Cactus."""
     conn = db.get_conn()
-    thr = get_settings().classify_threshold
+    cfg = get_settings()
+    thr = cfg.classify_threshold
     unsorted = db.folder_id(db.UNSORTED)
-    labels = ai_classify.unique_labels(classifiable_folders(conn))
-    new = set(folder_ids)
-    names = [l for _, l in labels]
-    rows = conn.execute("SELECT id, title, summary, keywords, text_excerpt FROM files ORDER BY id").fetchall()
+    media = db.folder_id(db.MEDIA)
+    marks = ",".join("?" * len(folder_ids))
+    new = [(r["id"], r["name"], r["description"]) for r in conn.execute(
+        f"SELECT id, name, description FROM virtual_folders WHERE id IN ({marks}) AND kind!='smart'", folder_ids)
+        if r["id"] != media]
+    labels = ai_classify.unique_labels(new)
+    rows = conn.execute("SELECT id, title, summary, keywords, text_excerpt, vec FROM files ORDER BY id").fetchall()
     progress(total=len(rows), processed=0)
+    cos: dict[int, np.ndarray] = {}
+    try:  # one potion vector per new folder: name + description
+        fv = ai_embed.embed([f"{n}. {d or ''}".strip() for _, n, d in new], wait=5.0)
+        cos = {fid: fv[k] for k, (fid, _, _) in enumerate(new)}
+    except Exception:
+        cos = {}
     added = 0
     for i, r in enumerate(rows, 1):
         if should_stop():
             break
         progress(current_file=r["title"])
-        text = ai_classify.classifier_text(r["title"] or "", r["summary"] or "",
-                                           json.loads(r["keywords"] or "[]"), r["text_excerpt"] or "")
+        todo = labels
+        if cos and r["vec"] is not None:
+            v = ai_embed.from_blob(r["vec"])
+            todo = [(fid, l) for fid, l in labels if float(v @ cos[fid]) >= cfg.newfolder_cosine]
         note = ""
-        try:
-            scores = ai_classify.classify(text, names)
-            gained = [(fid, s) for (fid, _), s in zip(labels, scores) if fid in new and s >= thr]
-            if gained:
-                conn.executemany("INSERT OR REPLACE INTO file_folder_links(file_id, folder_id, score) VALUES (?,?,?)",
-                                 [(r["id"], f, s) for f, s in gained])
-                conn.execute("DELETE FROM file_folder_links WHERE file_id=? AND folder_id=?", (r["id"], unsorted))
-                conn.commit()
-                added += len(gained)
-        except Exception as exc:
-            note = f"{type(exc).__name__}: {exc}"
-            if len(errors) < 20:
-                errors.append(f"file {r['id']}: classify: {note}")
-        set_classify_note(conn, r["id"], note)
+        if todo:
+            text = ai_classify.classifier_text(r["title"] or "", r["summary"] or "",
+                                               json.loads(r["keywords"] or "[]"), r["text_excerpt"] or "")
+            try:
+                scores = ai_classify.classify(text, [l for _, l in todo])
+                gained = [(fid, s) for (fid, _), s in zip(todo, scores) if s >= thr]
+                if gained:
+                    conn.executemany("INSERT OR REPLACE INTO file_folder_links(file_id, folder_id, score) VALUES (?,?,?)",
+                                     [(r["id"], f, s) for f, s in gained])
+                    conn.execute("DELETE FROM file_folder_links WHERE file_id=? AND folder_id=?", (r["id"], unsorted))
+                    conn.commit()
+                    added += len(gained)
+            except Exception as exc:
+                note = f"{type(exc).__name__}: {exc}"
+                if len(errors) < 20:
+                    errors.append(f"file {r['id']}: classify: {note}")
+            set_classify_note(conn, r["id"], note)
         progress(processed=i)
     return {"reclassified": len(rows), "links_added": added, **dict.fromkeys(SKIP_KEYS, 0)}

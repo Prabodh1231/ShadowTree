@@ -24,11 +24,12 @@ def test_seams_raise_not_ready(tmp_path, monkeypatch):
         _ORIG_O(b"x")
 
 
-def test_not_ready_classifier_sends_files_to_unsorted(client, sample_root, monkeypatch):
+def test_classifier_error_sends_text_files_to_unsorted(client, sample_root, monkeypatch):
     monkeypatch.setattr(ai_classify, "classify", _ORIG["classify"])
     run_scan(client, sample_root)
     for card in client.get("/files").json():
-        assert [f["name"] for f in card["folders"]] == ["Unsorted"]
+        want = ["Screenshots & Media"] if card["kind"] in ("image", "audio") else ["Unsorted"]
+        assert [f["name"] for f in card["folders"]] == want
 
 
 def test_onnx_threads_default_and_override(monkeypatch):
