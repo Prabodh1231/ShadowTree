@@ -86,6 +86,7 @@ def health():
     hint = "run scripts/download_models.py"
     return {
         "status": "ok",
+        "app": "ShadowTree",  # lets the desktop shell tell this backend from another program on the port
         "cactus": {"loaded": fl["cactus"], "files_present": cactus_files,
                    "load_errors": fl["failed"],
                    "hint": None if all(cactus_files.values()) else hint},

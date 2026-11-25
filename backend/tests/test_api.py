@@ -221,3 +221,10 @@ def test_socket_guard_blocks_external():
     with pytest.raises(AssertionError):
         s.connect(("93.184.216.34", 80))
     s.close()
+
+
+def test_tauri_origins_allowed_and_health_names_app(client):
+    for origin in ("http://tauri.localhost", "tauri://localhost"):
+        r = client.get("/health", headers={"origin": origin})
+        assert r.status_code == 200 and r.headers["access-control-allow-origin"] == origin
+    assert client.get("/health").json()["app"] == "ShadowTree"
