@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from .ai_cactus import MODEL_LOCK
 from .ai_classify import NotReady
+from .config import apply_env, get_settings, model_dir
 
 
 class NotDownloaded(NotReady):
     """The OCR model files are not on disk yet (before scripts/download_models.py)."""
-from .config import apply_env, get_settings, model_dir
+
 
 DET = "ch_PP-OCRv5_det_mobile.onnx"
 REC = "ch_PP-OCRv5_rec_mobile.onnx"   # multilingual rec: read "0x8007..." right where the English one did not
