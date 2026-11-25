@@ -74,8 +74,7 @@ npm run tauri dev
 
 Choose the `sample_messy_folder` folder (with the button, or drag it onto the window) and press "Index (Read-Only)".
 
-**Other way: in the browser.** Start the backend in one PowerShell window. Stop it later with Ctrl+C. Stop 
-pm run dev with Ctrl+C too.
+**Other way: in the browser.** Start the backend in one PowerShell window. Stop it later with Ctrl+C. Stop `npm run dev` with Ctrl+C too.
 
 ```powershell
 cd backend
@@ -111,6 +110,28 @@ npm run build
 **First run.** Models download once, which takes a few minutes. After that the backend runs offline. With all models loaded, the backend uses about 625 MB of RAM (working set, measured in the desktop window after a scan, searches and a new folder, OCR included; peak 627 MB). The old GLiClass model alone used 2.3 GB. The first scan of the 8 sample files takes about 10 seconds on this PC (CPU only). Some files may show a basic summary: when the title and summary model returns nothing, the file is still indexed with a title from its name. The first `npm run tauri dev` compiles the Rust shell and takes 2 to 3 minutes. If port 8000 already runs ShadowTree, the window uses it and leaves it running when you close. The backend log is `backend\data\tauri-backend.log`. If you move the app, set `$env:SHADOWTREE_REPO` to the repo folder.
 
 A 2-3 minute demo walk-through is in [docs/demo_script.md](docs/demo_script.md).
+
+## Using the app
+
+The window works like a file manager. The virtual folders are on the left, the files are in the middle, and the selected file's details are on the right.
+
+- **Three views.** Gallery (a big preview page with a filmstrip under it), Icons and List. Switch with the buttons in the toolbar. The app remembers your choice.
+- **Real previews.** Pictures and the first page of PDFs show as real thumbnails. The backend draws them in memory from a read-only open and writes nothing to disk. A preview appears only after the file passes the privacy check, or when you switch to Original. Until then you see a placeholder with the redacted summary.
+- **Redacted is the default.** Personal details are hidden in the text and in previews. Original shows everything, with a banner that says so.
+- **Open or reveal.** A double click or Enter opens the file in the app Windows uses for its type. "Reveal on Disk" shows it in File Explorer. ShadowTree never writes to the file. Only the supported file types are opened, and the path always comes from the index.
+- **Themes.** The toolbar toggle switches between System, Light and Dark.
+
+| Key | Does |
+|---|---|
+| Arrow keys | Move to the next or previous file |
+| Enter, or double click | Open the file in its own app |
+| Space | Full-size look at the file (Space again or Esc to close) |
+| `/` or Ctrl+F | Search |
+| Ctrl+B | Show or hide the folder panel |
+| Ctrl+Alt+B | Show or hide the info panel |
+| Esc | Close the full-size look or the info panel, or clear the search |
+
+The layout was picked from 20 mockups in [design-mockups/](design-mockups/) (open `design-mockups/index.html`). Mockup 20, Gallery, is the one built into the app.
 
 ## Models
 
@@ -151,7 +172,7 @@ Everything in this repo was written for this hackathon: the FastAPI backend, sca
 
 - **Needle is extractive.** The Cactus Needle model copies words from the file. Its titles and summaries can look rough.
 - **Search ranks by meaning, with small local models.** The order is approximate. A high match needs the reranker to agree, so vague queries now show "No strong matches. Closest:" with weak matches only. "money I spent" is one of these: the receipt is second, but only as a weak match. "invoice", "pay the bill", "my diary" and "meeting" give a strong match. "error message" finds the screenshot at about 29%, close to the cut-off of 25. The formula was tuned on 8 sample files. A search takes about 4 ms (8 files) to 31 ms (164 files) once warm.
-- **Windows only.** Paths, the Reveal button and the voice memo sample use Windows features.
+- **Windows only.** Paths, the Reveal and Open actions and the voice memo sample use Windows features.
 - **Old indexes.** An index made before the model change keeps its old folder scores. Delete `backend\data\veilfs.db` and scan again for a clean start.
 - **Desert Ant license check.** The Desert Ant browser models contact `events.desertant.com` when they load. It has no opt-out. No file content is sent. Details in Network & privacy.
 - **The folder sorter is careful.** DeBERTa files a document under a folder when its score is 0.5 or more. If no folder reaches 0.5, the file joins its single best topic folder when the score is at least 0.15 (`SOFT_FLOOR`), shown as a dashed "Best guess" chip. Below 0.15 it goes to Unsorted. New-folder jobs still use the strict 0.5 rule. On one real folder, 63 of 134 files stayed in Unsorted and 49 got a best-guess link. On the sample folder all files are sorted, but the Work & Research margin is thin (0.575 and 0.591 against 0.5).
@@ -194,7 +215,7 @@ The desktop app's content security policy allows 'unsafe-eval' for scripts, beca
 | [RapidOCR](https://github.com/RapidAI/RapidOCR) (`rapidocr`) and [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) (PP-OCRv5 mobile) | Reading text in images and scanned PDFs | Apache-2.0 |
 | [ONNX Runtime](https://onnxruntime.ai) (`onnxruntime`) | Runs the DeBERTa and OCR models | MIT |
 | [Hugging Face tokenizers](https://github.com/huggingface/tokenizers) | Tokenizing text for DeBERTa | Apache-2.0 |
-| [pypdfium2](https://github.com/pypdfium2-team/pypdfium2) | Drawing scanned PDF pages in memory for OCR | BSD-3-Clause or Apache-2.0 |
+| [pypdfium2](https://github.com/pypdfium2-team/pypdfium2) | Drawing PDF pages in memory for OCR and previews | BSD-3-Clause or Apache-2.0 |
 | [Tauri](https://tauri.app) | The desktop window | Apache-2.0 or MIT |
 | [Desert Ant Labs](https://desertant.com) (`@desert-ant-labs/redact`, `gist`, `emo`) | Redacting personal data, topics, emoji, in the window | Desert Ant license (see Network & privacy) |
 | [LiteRT.js](https://github.com/google-ai-edge/LiteRT) (`@litertjs/core`) | Runs the Desert Ant models in the window | Apache-2.0 |
