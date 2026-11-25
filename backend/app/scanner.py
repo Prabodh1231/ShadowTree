@@ -106,10 +106,12 @@ def needs_reread(row) -> bool:
 
 
 def classify_file(conn, file_id: int, folders: list, rec: dict) -> str:
-    """Link the file to every topic folder scoring >= threshold, else Unsorted.
+    """Link the file to every topic folder scoring >= threshold. If none does and the file has no type link,
+    link its single best topic folder when that score >= soft_floor (a best guess); else Unsorted.
     Screenshots & Media is decided by file type (image or audio), not by the classifier.
     Returns an error note ('' when fine) and stamps files.cls_ver on success. Never raises."""
-    thr = get_settings().classify_threshold
+    cfg = get_settings()
+    thr, soft = cfg.classify_threshold, cfg.soft_floor
     unsorted = db.folder_id(db.UNSORTED)
     media = db.folder_id(db.MEDIA)
     links: list[tuple[int, float]] = []
@@ -121,6 +123,10 @@ def classify_file(conn, file_id: int, folders: list, rec: dict) -> str:
         try:
             scores = ai_classify.classify(text, [l for _, l in labels])
             links = [(fid, s) for (fid, _), s in zip(labels, scores) if s >= thr]
+            if not links and len(scores) and rec.get("kind") not in MEDIA_KINDS:
+                best = max(range(len(scores)), key=lambda i: scores[i])  # best guess, real score kept
+                if scores[best] >= soft:
+                    links = [(labels[best][0], float(scores[best]))]
         except Exception as exc:
             note = f"{type(exc).__name__}: {exc}"
     if rec.get("kind") in MEDIA_KINDS:

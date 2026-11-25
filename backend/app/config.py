@@ -51,6 +51,7 @@ class Settings:
     data_dir: Path
     db_path: Path
     classify_threshold: float
+    soft_floor: float              # best-guess folder when nothing reaches classify_threshold
     newfolder_cosine: float        # new-folder pre-filter: potion cosine a file needs before DeBERTa scores it
     max_file_bytes: int
     pdf_max_pages: int
@@ -68,6 +69,7 @@ def get_settings() -> Settings:
         data_dir=data_dir,
         db_path=db_path,
         classify_threshold=_float("CLASSIFY_THRESHOLD", 0.5),
+        soft_floor=_float("SOFT_FLOOR", 0.15),
         newfolder_cosine=_float("NEWFOLDER_COSINE", 0.30),
         max_file_bytes=_int("MAX_FILE_MB", 25) * 1024 * 1024,
         pdf_max_pages=_int("PDF_MAX_PAGES", 10),
