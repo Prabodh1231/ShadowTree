@@ -21,6 +21,8 @@
     "@desert-ant-labs/emo": "5.0.0",
     "@desert-ant-labs/gist": "5.0.0",
     "@desert-ant-labs/redact": "5.0.0",
-    "@litertjs/core": "2.6.0"
+    "@litertjs/core": "2.6.0",
+    "@tauri-apps/api": "2.12.5",
+    "@tauri-apps/plugin-dialog": "2.8.4"
   }
 }

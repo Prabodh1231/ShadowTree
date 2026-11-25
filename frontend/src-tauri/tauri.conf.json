@@ -28,6 +28,21 @@
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data: blob: http://127.0.0.1:8000",
         "font-src": "'self' data:",
+        "base-uri": "'none'",
+        "object-src": "'none'",
+        "form-action": "'none'",
+        "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:8000 https://events.desertant.com https://huggingface.co https://*.huggingface.co https://*.hf.co"
+      },
+      "devCsp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'wasm-unsafe-eval'",
+        "worker-src": "'self' blob:",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: http://127.0.0.1:8000",
+        "font-src": "'self' data:",
+        "base-uri": "'none'",
+        "object-src": "'none'",
+        "form-action": "'none'",
         "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:8000 https://events.desertant.com https://huggingface.co https://*.huggingface.co https://*.hf.co ws://127.0.0.1:5173 http://127.0.0.1:5173"
       }
     }

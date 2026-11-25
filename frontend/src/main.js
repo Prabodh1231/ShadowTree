@@ -575,10 +575,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawe
 try { $('root').value = localStorage.getItem('veilfs-root') ?? ''; } catch { /* ignore */ }
 applyThemeLabel();
 renderAll();
-waitForBackend().then(() => refresh()).then(async () => { if (!state.down) { await resumeIfRunning(); } startAI(); });
+let backendReady = false;
+waitForBackend().then(() => { backendReady = true; return refresh(); }).then(async () => { if (!state.down) { await resumeIfRunning(); } startAI(); });
 // Desktop window: real dropped paths (the browser drop handler above stays for browsers).
 listenNativeDrop({
   onOver: () => document.body.classList.add('dropping'),
   onLeave: () => document.body.classList.remove('dropping'),
-  onDrop: (dir) => { if (state.scanning) return toast('A job is already running. Wait for it to finish.'); $('root').value = dir; startScan(); },
+  onDrop: (dir) => { if (!backendReady) return; if (state.scanning) return toast('A job is already running. Wait for it to finish.'); $('root').value = dir; startScan(); },
 }).catch((e) => console.warn('native drop unavailable', e));
