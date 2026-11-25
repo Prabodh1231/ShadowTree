@@ -42,8 +42,9 @@
   <main class="main">
     <header class="topbar">
       <form id="scan-form" class="scan-form" autocomplete="off">
+        <button id="pick-btn" class="btn" type="button" title="Open the Windows folder picker">📂 Choose folder…</button>
         <label class="sr-only" for="root">Folder to index</label>
-        <input id="root" type="text" placeholder="Folder to index, e.g. C:\Users\you\Documents" spellcheck="false">
+        <input id="root" type="text" placeholder="…or paste a folder path" spellcheck="false">
         <button id="scan-btn" class="btn btn-primary" type="submit">Index (Read-Only)</button>
       </form>
       <form id="search-form" class="search-form" role="search" autocomplete="off">

@@ -14,7 +14,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import ai_cactus, ai_classify, db, jobs, search as search_mod
+from . import ai_cactus, ai_classify, db, jobs, picker, search as search_mod
 from .config import ALLOWED_HOSTS, ALLOWED_ORIGINS, apply_env, get_settings, is_inside
 
 apply_env()  # before anything can import cactus or gliclass (they are imported lazily)
@@ -220,6 +220,26 @@ def create_folder(body: FolderBody):
 @app.get("/search")
 def search(q: str = Query(min_length=1, max_length=200)):
     return search_mod.search(db.get_conn(), q)
+
+
+class PickBody(Body):
+    initial: str | None = Field(default=None, max_length=1024)
+
+
+@app.post("/pick-folder")
+def pick_folder(body: PickBody):
+    """Open the native Windows folder dialog. Returns {"path": str} or {"path": null} if cancelled.
+    Browsers never reveal a folder's full path, so the local backend asks Windows instead."""
+    try:
+        return {"path": picker.pick_folder(body.initial)}
+    except picker.PickerBusy:
+        raise HTTPException(409, "a folder dialog is already open")
+
+
+@app.get("/quick-folders")
+def quick_folders():
+    """The user's Documents, Desktop, Downloads and Pictures folders that exist."""
+    return {"folders": picker.quick_folders()}
 
 
 @app.post("/reveal")

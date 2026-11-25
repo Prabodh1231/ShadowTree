@@ -158,11 +158,44 @@ function emptyState() {
     h('div', { class: 'big', text: '🗂️' }),
     h('h2', { text: 'Find any file by what it says, not what it’s called' }),
     h('p', { text: 'VeilFS reads your files and sorts them into virtual folders. Your real files are never moved, changed or deleted.' }),
-    h('ol', {},
-      h('li', { text: 'Type the path of a folder in the box at the top.' }),
-      h('li', { text: 'Press “Index (Read-Only)”.' }),
-      h('li', { text: 'Watch your files appear here, then try the search bar.' })),
-    h('button', { class: 'btn btn-primary', type: 'button', onclick: () => $('root').focus(), text: 'Choose a folder to index' }));
+    h('button', { class: 'btn btn-primary btn-big', type: 'button', onclick: () => chooseFolder(), text: '📂 Choose a folder…' }),
+    quickRow(),
+    h('p', { class: 'hint', text: 'You can also drag a folder onto this window, or paste a path in the box at the top.' }));
+}
+
+// One-click shortcuts for the usual places (filled in once the backend answers).
+let quickCache = null;
+function quickRow() {
+  const row = h('div', { class: 'quick', 'aria-label': 'Common folders' });
+  const fill = (list) => {
+    if (!list?.length) return;
+    row.replaceChildren(h('span', { class: 'quick-label', text: 'Or start with:' }),
+      ...list.map((f) => h('button', { class: 'btn btn-chip', type: 'button', title: f.path, text: QUICK_ICON[f.name] + ' ' + f.name,
+        onclick: () => { $('root').value = f.path; startScan(); } })));
+  };
+  if (quickCache) fill(quickCache);
+  else api.quickFolders().then((r) => { quickCache = r.folders; fill(quickCache); }).catch(() => {});
+  return row;
+}
+const QUICK_ICON = { Documents: '📄', Desktop: '🖥️', Downloads: '⬇️', Pictures: '🖼️' };
+
+// Browsers never tell a page where a folder lives, so the local backend opens
+// the normal Windows "Select Folder" dialog and hands back the path.
+let picking = false;
+async function chooseFolder() {
+  if (picking || state.scanning) return;
+  picking = true;
+  const btn = $('pick-btn'); const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Pick a folder in the window…';
+  try {
+    const r = await api.pickFolder($('root').value.trim() || null);
+    if (r.path) { $('root').value = r.path; startScan(); }
+  } catch (err) {
+    if (err.status === 0) { state.down = true; renderAll(); }
+    else toast(err.status === 409 ? 'A folder window is already open. Check your taskbar.' : err.message);
+  } finally {
+    picking = false; btn.disabled = false; btn.textContent = label;
+  }
 }
 
 function downState() {
@@ -415,10 +448,12 @@ async function resumeIfRunning() {
   try { const s = await api.scanStatus(); if (s.state === 'running') { state.scanning = true; setScanBusy(true); pollJob(); } } catch { /* ignore */ }
 }
 
-async function onScan(e) {
-  e.preventDefault();
-  const root = $('root').value.trim();
-  if (!root) { $('root').focus(); return toast('Type the path of a folder first.'); }
+function onScan(e) { e.preventDefault(); startScan(); }
+
+async function startScan() {
+  const root = $('root').value.trim().replace(/^"(.*)"$/, '$1');  // Explorer's "Copy as path" adds quotes
+  if (!root) return chooseFolder();
+  $('root').value = root;
   try { localStorage.setItem('veilfs-root', root); } catch { /* ignore */ }
   passAbort?.abort();
   $('notes').replaceChildren(); showSkipped(null);
@@ -514,6 +549,18 @@ $('theme-toggle').addEventListener('click', () => {
 
 // ---------- boot ----------
 $('scan-form').addEventListener('submit', onScan);
+$('pick-btn').addEventListener('click', () => chooseFolder());
+// Drag and drop: the browser hides a dropped folder's location, so a drop opens the
+// picker (it also stops the browser from opening a dropped file in place of the app).
+const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
+window.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); document.body.classList.add('dropping'); });
+window.addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('dropping'); });
+window.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); document.body.classList.remove('dropping');
+  toast('Browsers keep a dropped folder’s location private. Pick it once in the window that opens.');
+  chooseFolder();
+});
 $('search-form').addEventListener('submit', (e) => { e.preventDefault(); doSearch(); });
 $('q').addEventListener('input', () => { if (!$('q').value.trim() && state.search) doSearch(); });
 $('new-folder').addEventListener('submit', onNewFolder);

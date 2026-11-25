@@ -46,4 +46,7 @@ export const api = {
     return { results: r.results ?? [], weak: r.weak ?? [] };
   },
   reveal: (file_id) => post('/reveal', { file_id }),
+  // Native Windows folder dialog, opened by the local backend ({path} or {path: null}).
+  pickFolder: (initial) => post('/pick-folder', initial ? { initial } : {}),
+  quickFolders: () => call('/quick-folders'),
 };
