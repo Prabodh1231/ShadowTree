@@ -179,3 +179,5 @@ body.dropping::after { content: 'Drop to choose this folder'; position: fixed; i
   .main { padding: 18px; overflow: visible; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.chip.guess { background: transparent; border-style: dashed; color: var(--ink-2); }
+.chip.guess b { color: var(--ink-2); }

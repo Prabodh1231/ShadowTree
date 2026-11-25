@@ -42,6 +42,12 @@ const KIND_ICON = { pdf: '📄', text: '📝', image: '🖼️', audio: '🎧' }
 // ---------- helpers ----------
 const pct = (v) => { if (v == null || isNaN(v)) return null; return Math.round(v <= 1 ? v * 100 : v); };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+// A topic-folder link under 0.5 is a best guess (soft floor). Unsorted and type links never are.
+const chip = (l) => {
+  const guess = l.name !== UNSORTED && l.name !== 'Screenshots & Media' && l.score > 0 && l.score < 0.5;
+  return h('span', guess ? { class: 'chip guess', title: 'Best guess' } : { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(),
+    pct(l.score) > 0 && h('b', { text: pct(l.score) + '%' }));
+};
 function toast(msg) {
   const t = $('toast');
   t.textContent = msg; t.hidden = false;
@@ -310,7 +316,7 @@ function cardEl(c) {
     safe.keywords.slice(0, 5).map((k) => h('span', { class: 'tag', text: k }))) : null,
   (c.folders?.length || hasPii(c)) ? h('div', { class: 'chips' },
     hasPii(c) && h('span', { class: 'pii', title: (meta.pii_types ?? []).join(', ') || 'Personal details found', text: '⚠ PII' }),
-    (c.folders ?? []).map((l) => h('span', { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(), pct(l.score) > 0 && h('b', { text: pct(l.score) + '%' })))) : null,
+    (c.folders ?? []).map((l) => chip(l))) : null,
   h('div', { class: 'pathrow' },
     h('div', { class: 'path', title: c.path }, h('span', { text: c.path })),
     h('button', { class: 'btn btn-small', type: 'button', text: 'Copy', title: 'Copy the path', onclick: (e) => { e.stopPropagation(); copyPath(c.path); } })),
@@ -387,7 +393,7 @@ function renderDrawer(mode) {
     closeBtn(),
     h('h2', { id: 'drawer-title', text: mode === 'redacted' ? safeView(cardObjs.get(f.id) ?? f).title : (f.title || f.name) }),
     h('div', { class: 'chips' }, hasPii(f) && h('span', { class: 'pii', text: '⚠ PII: ' + ((meta.pii_types ?? []).join(', ') || 'personal details') }),
-      (f.folders ?? []).map((l) => h('span', { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(), pct(l.score) > 0 && h('b', { text: pct(l.score) + '%' })))),
+      (f.folders ?? []).map((l) => chip(l))),
     h('h3', { text: 'Summary' }),
     h('p', { class: 'full', id: 'drawer-summary', text: summaryText(f, mode) }),
     h('h3', { text: 'Text from the file' }),
