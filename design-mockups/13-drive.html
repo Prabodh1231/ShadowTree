@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree · Drive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="data.js"></script>
+<script src="kit.js"></script>
+<style>
+/* Drive: the cloud-drive home page. Search on top, "Suggested" first, folders as chips, files as cards,
+   grid/list toggle. Skin: sunflower and ink, big radii, friendly type. */
+:root{--bg:#fffdf6;--ink:#1f2433;--mute:#6b7083;--line:#e8e4d4;--sun:#f6c445;--sunsoft:#fdf0c4;--card:#fff;--pii:#c2255c}
+*{box-sizing:border-box;margin:0}
+body{font:15px/1.4 "Lexend",system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.app{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+.side{padding:20px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:20px;padding:0 10px 18px}
+.logo i{width:34px;height:34px;border-radius:10px;background:var(--sun);display:grid;place-items:center}
+.new{display:flex;align-items:center;gap:12px;height:52px;padding:0 22px;border-radius:26px;background:#fff;border:1px solid var(--line);font-weight:500;box-shadow:0 2px 0 var(--line);margin-bottom:12px;width:max-content}
+.new:hover{background:var(--sunsoft)}
+.nv{display:flex;align-items:center;gap:14px;height:42px;padding:0 16px;border-radius:21px;width:100%;text-align:left;font-weight:400}
+.nv:hover{background:#0000000a}
+.nv[aria-current=true]{background:var(--sunsoft);font-weight:500}
+.nv .n{margin-left:auto;color:var(--mute);font-size:13px}
+.store{margin-top:auto;padding:14px;border-radius:16px;background:#fff;border:1px solid var(--line);font-size:13px;color:var(--mute)}
+.store b{display:block;color:var(--ink);font-weight:500;margin-bottom:6px}
+.store .bar{height:6px;border-radius:3px;background:#efe9d0;margin:8px 0;overflow:hidden}.store .bar i{display:block;height:100%;width:0%;background:var(--sun)}
+.cont{padding:16px 36px 60px;min-width:0}
+.top{display:flex;gap:16px;align-items:center;position:sticky;top:0;background:var(--bg);padding:6px 0 14px;z-index:3}
+.search{flex:1;max-width:720px;height:52px;border-radius:26px;background:#f6f1de;display:flex;align-items:center;gap:14px;padding:0 20px;transition:.15s}
+.search:focus-within{background:#fff;box-shadow:0 0 0 2px var(--ink)}
+.search input{flex:1;border:0;outline:0;background:none;font:inherit}
+.search .ic{color:var(--mute)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:22px;overflow:hidden;background:#fff}
+.seg button{padding:10px 16px;font-size:13.5px}
+.seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+.top .r{margin-left:auto;display:flex;gap:10px;align-items:center}
+.ibtn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line);background:#fff}
+.ibtn:hover{background:var(--sunsoft)}
+h1{font-weight:400;font-size:26px;margin:14px 0 18px;letter-spacing:-.01em}
+h2{font-weight:500;font-size:15px;margin:26px 0 12px;display:flex;align-items:center;gap:8px;color:var(--ink)}
+h2 small{font-weight:300;color:var(--mute);font-size:13px}
+.chips{display:flex;gap:10px;flex-wrap:wrap}
+.fchip{display:flex;align-items:center;gap:12px;height:48px;padding:0 18px 0 14px;border-radius:14px;background:#fff;border:1px solid var(--line);font-size:14px;min-width:210px}
+.fchip:hover{background:var(--sunsoft);border-color:#e9d58b}
+.fchip .ic{color:var(--ink)}
+.fchip .n{margin-left:auto;color:var(--mute);font-size:12.5px}
+.filt{display:flex;gap:8px;margin:18px 0 0}
+.fl{height:34px;padding:0 14px;border-radius:17px;border:1px solid var(--line);background:#fff;font-size:13px;display:flex;align-items:center;gap:6px}
+.fl[aria-pressed=true]{background:var(--sunsoft);border-color:#e9d58b;font-weight:500}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;cursor:pointer;text-align:left;display:flex;flex-direction:column;transition:box-shadow .15s,border-color .15s}
+.card:hover{box-shadow:0 6px 18px #1f243314;border-color:#d7cfa8}
+.card:focus-visible,.fchip:focus-visible,.nv:focus-visible,.lrow:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.thumb{height:128px;background:#f7f3e2;position:relative;overflow:hidden;padding:14px 18px;font:10.5px/1.45 Consolas,monospace;color:#6a6650;white-space:pre-wrap;word-break:break-all}
+.thumb::after{content:"";position:absolute;inset:auto 0 0 0;height:46px;background:linear-gradient(transparent,#f7f3e2)}
+.thumb.img{padding:0;display:grid;place-items:center}
+.thumb.aud{display:flex;align-items:center;justify-content:center;gap:4px}
+.thumb.aud i{width:5px;border-radius:3px;background:var(--ink);opacity:.8}
+.thumb mark{background:#1f2433;color:transparent;border-radius:2px}
+.thumb mark.o{background:#fbe0ea;color:var(--pii)}
+.card .meta{padding:12px 14px 14px;display:flex;flex-direction:column;gap:3px}
+.card .nm{display:flex;gap:9px;align-items:center;font-weight:500;font-size:14px}
+.card .nm span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .sub{font-size:12.5px;color:var(--mute);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tag{font-size:11.5px;padding:1px 8px;border-radius:9px;background:#f1ecd6}
+.tag.p{background:#fbe0ea;color:var(--pii)}.tag.g{background:#ffe7b8;color:#8a5a00}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.list{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.lrow{display:grid;grid-template-columns:1fr 220px 90px 90px 170px;gap:12px;align-items:center;height:52px;padding:0 20px;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px;width:100%;text-align:left}
+.lrow:last-child{border:0}
+.lrow:hover{background:#fffaf0}
+.lrow.h{height:42px;color:var(--mute);font-size:12.5px;cursor:default}.lrow.h:hover{background:none}
+.lrow .nm{display:flex;gap:12px;align-items:center;min-width:0}.lrow .nm span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+b.hit{background:#ffe58a;font-weight:inherit;border-radius:2px}
+.empty{padding:70px 20px;text-align:center;color:var(--mute)}
+/* detail drawer */
+.dr{position:fixed;top:0;right:0;bottom:0;width:420px;background:#fff;border-left:1px solid var(--line);box-shadow:-12px 0 40px #1f24331c;transform:translateX(105%);transition:transform .22s ease;z-index:6;display:flex;flex-direction:column}
+.dr.on{transform:none}
+.dr header{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.dr header b{flex:1;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dr .bd{padding:18px 22px;overflow:auto;flex:1}
+.dr .tabs{display:flex;gap:4px;margin-bottom:14px}
+.page{background:#f7f3e2;border-radius:14px;padding:16px;font:12.5px/1.65 Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;word-break:break-word;margin:14px 0}
+mark.pii{padding:0 3px;border-radius:3px}mark.pii.r{background:#1f2433;color:#fff}mark.pii.o{background:#fbe0ea;color:var(--pii)}
+.dr dl{display:grid;grid-template-columns:90px 1fr;gap:8px;font-size:13.5px;margin-top:6px}.dr dt{color:var(--mute)}.dr dd{margin:0;overflow-wrap:anywhere}
+.cta{height:42px;padding:0 20px;border-radius:21px;background:var(--ink);color:#fff;font-weight:500;display:inline-flex;align-items:center;gap:8px}
+.cta.o{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.scrim{position:fixed;inset:0;background:#1f243322;opacity:0;pointer-events:none;transition:.2s;z-index:5}.scrim.on{opacity:1;pointer-events:auto}
+#toast{background:var(--ink);font-family:Lexend}
+@media (max-width:980px){.app{grid-template-columns:1fr}.side{display:none}.lrow{grid-template-columns:1fr 90px}.lrow>:nth-child(n+3){display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="side" aria-label="Main">
+    <div class="logo"><i id="lg"></i>ShadowTree</div>
+    <button class="new" id="nf"></button>
+    <div id="nvs"></div>
+    <div class="store"><b>Read-only</b>Your files stay where they are. This is a view over them.<div class="bar"><i id="pb"></i></div><span id="pt">Indexed 13 of 13 files</span><br><button class="cta o" id="idx" style="margin-top:10px;height:36px;font-size:13px">Index (Read-Only)</button></div>
+  </nav>
+  <main class="cont">
+    <div class="top">
+      <label class="search"><span id="si"></span><input id="q" placeholder="Search your files" aria-label="Search your files" autocomplete="off"></label>
+      <div class="r"><div class="seg" role="group" aria-label="Text view"><button id="vr" aria-pressed="true">Redacted</button><button id="vo" aria-pressed="false">Original</button></div>
+      <div class="seg" role="group" aria-label="Layout"><button id="lg1" aria-pressed="true" aria-label="Grid"></button><button id="lg2" aria-pressed="false" aria-label="List"></button></div></div>
+    </div>
+    <div id="page"></div>
+  </main>
+</div>
+<div class="scrim" id="scrim"></div>
+<aside class="dr" id="dr" aria-label="File details"></aside>
+<script>
+const {S,$,$$,icon,esc,FCOL}=KIT;
+let nav='home',q='',red=true,layout='grid',kind='all',open=null;
+$('#lg').innerHTML=icon('tree',20);$('#si').innerHTML=icon('search',20);$('#nf').innerHTML=icon('plus',22)+'New folder';
+$('#lg1').innerHTML=icon('grid',16);$('#lg2').innerHTML=icon('list',16);
+const NAV=[['home','Home','home'],['all','All files','tree'],['pii','Sensitive','shield'],['guess','Needs a look','help']];
+function nvs(){$('#nvs').innerHTML=NAV.map(([id,t,ic])=>`<button class="nv" data-n="${id}" aria-current="${!q&&nav===id}">${icon(ic,19)}${t}<span class="n">${id==='all'?S.files.length:id==='pii'?S.sensitive().length:id==='guess'?S.files.filter(S.isGuess).length:''}</span></button>`).join('');
+  $$('.nv').forEach(b=>b.onclick=()=>{q='';$('#q').value='';nav=b.dataset.n;draw()})}
+/* thumbnail: the first lines of the file, personal data covered; a picture for images, bars for audio */
+function thumb(f){
+  if(f.kind==='image')return `<div class="thumb img">${icon('image',44)}</div>`;
+  if(f.kind==='audio')return `<div class="thumb aud">${[20,46,30,64,40,76,34,54,22,44,28,16].map(h=>`<i style="height:${h}px"></i>`).join('')}</div>`;
+  const t=S.parseText(f.text).map(s=>s.t==='text'?esc(s.v):red?`<mark>${'x'.repeat(s.v.length)}</mark>`:`<mark class="o">${esc(s.v)}</mark>`).join('');
+  return `<div class="thumb">${t}</div>`}
+function tags(f){return (KIT.pii(f)?'<span class="tag p">Personal data</span>':'')+(S.isGuess(f)?'<span class="tag g">Best guess</span>':'')}
+function card(f,m){const fo=S.primary(f);return `<button class="card" data-id="${f.id}">${thumb(f)}<div class="meta"><div class="nm">${icon(KIT.kindIcon(f),17)}<span>${q?KIT.hl(f.name,q):esc(f.name)}</span></div><div class="sub"><i class="dot" style="background:${FCOL[fo.id]}"></i>${esc(fo.short)}${m!=null?' · '+m+'% match':''} ${tags(f)}</div></div></button>`}
+function lrow(f,m){const fo=S.primary(f);return `<button class="lrow" data-id="${f.id}"><div class="nm">${icon(KIT.kindIcon(f),19)}<span>${q?KIT.hl(f.name,q):esc(f.name)}</span></div><div style="display:flex;gap:8px;align-items:center"><i class="dot" style="background:${FCOL[fo.id]}"></i>${esc(fo.name)}</div><div>${m!=null?m+'%':S.pct(S.score(f))+'%'}</div><div>${S.size(f.bytes)}</div><div>${tags(f)}</div></button>`}
+function files(L,label,sub){
+  if(kind!=='all')L=L.filter(r=>r.f.kind===kind);
+  const KS=[['all','Any type'],['pdf','PDF'],['text','Text'],['image','Images'],['audio','Audio']];
+  return `<div class="filt">${KS.map(([k,t])=>`<button class="fl" data-k="${k}" aria-pressed="${kind===k}">${t}</button>`).join('')}</div><h2>${label}<small>${sub||''}</small></h2>`+
+   (L.length?(layout==='grid'?`<div class="cards">${L.map(r=>card(r.f,r.m)).join('')}</div>`:`<div class="list"><div class="lrow h"><div>Name</div><div>Folder</div><div>${q?'Match':'Fit'}</div><div>Size</div><div>Notes</div></div>${L.map(r=>lrow(r.f,r.m)).join('')}</div>`):`<div class="empty">Nothing here.</div>`)}
+function draw(){
+  nvs();let h='';
+  if(q.trim()){const r=KIT.run(q);h=`<h1>Results for “${esc(q)}”</h1>`+files(r.hits.map(x=>({f:x.f,m:x.match})),'Best matches first',r.weak?`${r.weak} weak match${r.weak>1?'es':''} hidden`:'')}
+  else if(nav==='home'){
+    h=`<h1>Welcome back</h1><h2>Suggested <small>Needs a look first, then files with personal data</small></h2><div class="cards">${[...S.files.filter(S.isGuess),...S.sensitive().filter(f=>!S.isGuess(f))].slice(0,4).map(f=>card(f,null)).join('')}</div>
+    <h2>Folders <small>Virtual. Nothing moves on your disk.</small></h2><div class="chips">${S.folders.map(f=>`<button class="fchip" data-f="${f.id}"><i class="dot" style="background:${FCOL[f.id]}"></i>${esc(f.name)}<span class="n">${S.inFolder(f.id).length}</span></button>`).join('')}</div>`+
+    files(S.files.map(f=>({f})),'All files','')}
+  else if(S.fById[nav])h=`<h1>${esc(S.fById[nav].name)}</h1><p style="color:var(--mute);margin:-8px 0 0">${esc(S.fById[nav].blurb)}</p>`+files(S.inFolder(nav).map(f=>({f,m:Math.round(f.links.find(l=>l[0]===nav)[1]*100)})),'Files','')
+  else h=`<h1>${nav==='all'?'All files':nav==='pii'?'Sensitive':'Needs a look'}</h1>`+files((nav==='all'?S.files:nav==='pii'?S.sensitive():S.files.filter(S.isGuess)).map(f=>({f})),'Files','');
+  $('#page').innerHTML=h;
+  $$('#page .card,#page .lrow[data-id]').forEach(c=>c.onclick=()=>show(+c.dataset.id));
+  $$('#page [data-f]').forEach(c=>c.onclick=()=>{nav=c.dataset.f;draw();scrollTo(0,0)});
+  $$('#page [data-k]').forEach(c=>c.onclick=()=>{kind=c.dataset.k;draw()});
+}
+function show(id){open=id;const f=S.byId[id],fo=S.primary(f);
+  $('#dr').innerHTML=`<header>${icon(KIT.kindIcon(f),22)}<b>${esc(f.title)}</b><button class="ibtn" id="cl" aria-label="Close">${icon('x',18)}</button></header>
+  <div class="bd"><div class="seg" role="group" aria-label="Text view"><button data-r="1" aria-pressed="${red}">Redacted</button><button data-r="0" aria-pressed="${!red}">Original</button></div>
+  <div class="page">${KIT.body(f,red,q)}</div>
+  <p style="font-size:14px;line-height:1.55">${esc(f.summary)}</p>
+  <dl><dt>Folder</dt><dd>${esc(fo.name)}${S.isGuess(f)?' · <span class="tag g">Best guess</span>':''}</dd><dt>Match</dt><dd>${S.pct(S.score(f))}%</dd><dt>Size</dt><dd>${S.size(f.bytes)}</dd><dt>On disk</dt><dd>${esc(S.path(f))}</dd><dt>Tags</dt><dd>${f.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join(' ')}</dd></dl>
+  <div style="display:flex;gap:10px;margin-top:20px"><button class="cta" id="rv">${icon('open',16)}Reveal on Disk</button><button class="cta o" id="cp">Copy path</button></div></div>`;
+  $('#dr').classList.add('on');$('#scrim').classList.add('on');
+  $('#cl').onclick=close;$('#rv').onclick=()=>KIT.toast('Revealed in Windows Explorer');$('#cp').onclick=()=>KIT.toast('Path copied');
+  $$('#dr [data-r]').forEach(b=>b.onclick=()=>{red=b.dataset.r==='1';setRed(red);show(id)});$('#cl').focus()}
+function close(){$('#dr').classList.remove('on');$('#scrim').classList.remove('on');open=null}
+function setRed(v){red=v;$('#vr').setAttribute('aria-pressed',v);$('#vo').setAttribute('aria-pressed',!v);draw();if(open)show(open)}
+$('#scrim').onclick=close;$('#vr').onclick=()=>setRed(true);$('#vo').onclick=()=>setRed(false);
+$('#lg1').onclick=()=>{layout='grid';$('#lg1').setAttribute('aria-pressed',true);$('#lg2').setAttribute('aria-pressed',false);draw()};
+$('#lg2').onclick=()=>{layout='list';$('#lg2').setAttribute('aria-pressed',true);$('#lg1').setAttribute('aria-pressed',false);draw()};
+$('#q').oninput=e=>{q=e.target.value;draw()};
+$('#nf').onclick=()=>KIT.toast('Created “New folder”. Sorting your files into it…');
+$('#idx').onclick=()=>{$('#idx').disabled=true;KIT.scan(v=>{$('#pb').style.width=v*100+'%';$('#pt').textContent='Indexing… '+Math.round(v*13)+' of 13'},()=>{$('#pt').textContent='Indexed 13 of 13 files';$('#idx').disabled=false;KIT.toast('Nothing was changed on your disk.')})};
+$('#pb').style.width='100%';
+addEventListener('keydown',e=>{if(e.key==='Escape')close();if(e.key==='/'&&document.activeElement!==$('#q')){e.preventDefault();$('#q').focus()}});
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree 03 · Catalogue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Hanken+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* Concept: a library card catalogue. Folders are drawers, files are typed index cards,
+     personal data is covered with black tape, and matching is stamped on the card. */
+  :root{--desk:#1d3730;--oak:#4a3326;--oak2:#5b4031;--brass:#c9a24a;--brass2:#8e6f27;--card:#f1f3ec;--rule:#c23b32;--line:#a9c1da;--type:#26231f;--stamp:#5a3c8c;--red:#b3241c}
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--desk);color:#e8eee9;font:15px/1.4 "Hanken Grotesk",sans-serif;min-height:100vh}
+  header{display:flex;align-items:center;gap:28px;padding:22px 40px 18px;border-bottom:4px solid #12241f}
+  .plate{background:linear-gradient(#d8b95e,#b4913a);color:#2a2005;font:700 13px "Hanken Grotesk";letter-spacing:.14em;text-transform:uppercase;padding:9px 18px;border-radius:3px;box-shadow:inset 0 0 0 2px #8e6f27,0 2px 0 #0e1e1a}
+  .consult{flex:1;max-width:560px;display:flex;align-items:center;gap:10px;background:var(--card);color:var(--type);padding:6px 14px;border-radius:2px;border-top:4px solid var(--rule)}
+  .consult label{font:14px "Special Elite";white-space:nowrap}
+  .consult input{flex:1;font:16px "Special Elite";border:0;border-bottom:1px solid var(--line);background:transparent;padding:4px 2px;color:var(--type)}
+  .consult input:focus{outline:2px solid #2a6b57;outline-offset:2px}
+  .note{margin-left:auto;font:13px "Special Elite";color:#9fc2b4}
+  .wrap{display:grid;grid-template-columns:330px 1fr;gap:44px;padding:34px 40px 60px;max-width:1280px;margin:0 auto}
+
+  /* cabinet */
+  .cabinet{display:flex;flex-direction:column;gap:10px;align-self:start}
+  .drawer{all:unset;cursor:pointer;display:flex;align-items:center;justify-content:center;height:78px;background:var(--oak);border:2px solid #2e1f16;border-radius:3px;position:relative;box-shadow:inset 0 3px 0 var(--oak2),0 3px 0 #1a110b;transition:transform .25s ease,box-shadow .25s}
+  .drawer:focus-visible{outline:3px solid var(--brass);outline-offset:3px}
+  .drawer .lab{background:var(--card);color:var(--type);padding:4px 12px 4px;border:2px solid var(--brass);font:14px/1.15 "Special Elite";text-align:center;min-width:190px;box-shadow:0 0 0 3px var(--brass2)}
+  .drawer .lab small{display:block;font-size:12px;color:#6b665b}
+  .drawer::after{content:"";position:absolute;bottom:8px;left:50%;width:46px;height:9px;margin-left:-23px;border-radius:0 0 9px 9px;background:var(--brass);box-shadow:0 2px 0 var(--brass2)}
+  .drawer.on{transform:translateX(26px);box-shadow:inset 0 3px 0 var(--oak2),0 3px 0 #1a110b,-26px 0 0 #0f1d19}
+  .drawer.pii .lab{border-color:var(--red);box-shadow:0 0 0 3px #6e1510;color:var(--red)}
+
+  /* cards */
+  .out h1{font:400 20px "Special Elite";margin-bottom:14px;color:#cfe3da}
+  .stack{display:flex;flex-direction:column;max-width:760px}
+  .card{background:var(--card);color:var(--type);border-radius:4px 4px 0 0;position:relative;overflow:hidden;box-shadow:0 -3px 0 rgba(0,0,0,.25);margin-top:-1px;max-height:48px;transition:max-height .35s ease;
+    background-image:linear-gradient(transparent 47px,var(--rule) 47px,var(--rule) 49px,transparent 49px),repeating-linear-gradient(transparent 0 23px,var(--line) 23px 24px);background-position:0 0,0 60px;background-repeat:no-repeat,repeat}
+  .card.on{max-height:640px}
+  .card .head{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:14px;width:100%;height:48px;padding:0 22px;cursor:pointer;font:400 17px "Special Elite"}
+  .card .head:focus-visible{outline:3px solid #2a6b57;outline-offset:-3px}
+  .card .call{margin-left:auto;font-size:13px;color:#6a6559}
+  .card .pct{font-size:13px;color:var(--stamp);min-width:42px;text-align:right}
+  .inner{padding:18px 26px 52px 80px;position:relative;font:15px/24px "Special Elite"}
+  .inner dl{display:grid;grid-template-columns:104px 1fr;row-gap:0}
+  .inner dt{color:#6a6559}
+  .inner dd{margin:0;min-height:24px}
+  .inner .body{margin:12px 0 4px;padding:0;white-space:pre-wrap;font:14px/24px "Special Elite"}
+  .tape{background:#111;color:#111;padding:0 2px;transform:rotate(-.8deg);display:inline-block;line-height:18px;border-radius:1px}
+  .tape.off{background:transparent;color:var(--red);transform:none;text-decoration:underline wavy rgba(179,36,28,.5)}
+  .stamp{position:absolute;right:34px;top:18px;border:3px solid var(--stamp);color:var(--stamp);border-radius:6px;padding:2px 12px;font:400 20px/1.1 "Special Elite";transform:rotate(7deg);text-align:center;opacity:.88}
+  .stamp small{display:block;font-size:11px}
+  .stamp.guess{border-style:dashed;color:#8a6410;border-color:#8a6410;transform:rotate(-5deg)}
+  .restrict{position:absolute;right:30px;top:84px;color:var(--red);border:3px double var(--red);padding:0 10px;font:400 16px "Special Elite";transform:rotate(-3deg);opacity:.85}
+  .hole{position:absolute;bottom:14px;left:50%;width:18px;height:18px;margin-left:-9px;background:var(--desk);border-radius:50%;box-shadow:inset 0 2px 3px rgba(0,0,0,.5)}
+  .acts{display:flex;gap:10px;margin-top:14px;position:relative;z-index:1}
+  .acts button{font:14px "Special Elite";background:#fff;border:1px solid var(--type);padding:3px 12px;cursor:pointer;color:var(--type)}
+  .acts button:hover{background:#e9efe2}
+  .acts button:focus-visible{outline:3px solid #2a6b57;outline-offset:2px}
+  .none{font:16px "Special Elite";color:#9fc2b4;padding:20px 0}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr;padding:20px}.cabinet{flex-direction:row;flex-wrap:wrap}.drawer{flex:1 1 140px;height:64px}.drawer .lab{min-width:0}header{flex-wrap:wrap;padding:16px 20px}.inner{padding-left:26px}.stamp,.restrict{display:none}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="plate">ShadowTree catalogue</div>
+  <form class="consult" onsubmit="return false"><label for="q">Consult:</label><input id="q" type="search" placeholder="e.g. pay the bill" autocomplete="off"></form>
+  <div class="note">Cards are copies. The originals stay in their folder.</div>
+</header>
+<div class="wrap">
+  <nav class="cabinet" id="cab" aria-label="Drawers"></nav>
+  <section class="out"><h1 id="h"></h1><div class="stack" id="stack"></div></section>
+</div>
+<script src="data.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const drawers=[...ST.folders.map(f=>({id:f.id,name:f.name,files:ST.inFolder(f.id).filter(x=>x.links[0][0]===f.id)})),{id:'pii',name:'Sensitive (PII)',files:ST.sensitive(),pii:true}];
+let cur='fin', open=null, shown={};
+const call=f=>(f.links[0][0].slice(0,3).toUpperCase())+' '+String(f.id).padStart(4,'0');
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function cab(){
+  $('cab').innerHTML='';
+  drawers.forEach(d=>{const b=document.createElement('button');b.className='drawer'+(d.pii?' pii':'')+(!$('q').value&&cur===d.id?' on':'');
+    b.innerHTML=`<span class="lab">${d.name}<small>${d.files.length} ${d.files.length===1?'card':'cards'}</small></span>`;
+    b.onclick=()=>{cur=d.id;$('q').value='';open=null;cab();cards()};$('cab').appendChild(b)});
+}
+function cards(){
+  const q=$('q').value.trim(); let list;
+  if(q){list=ST.search(q).filter(r=>r.match>=25);$('h').textContent='Cards matching “'+q+'”'}
+  else{const d=drawers.find(x=>x.id===cur);list=d.files.map(f=>({f}));$('h').textContent='Drawer: '+d.name}
+  const st=$('stack');st.innerHTML='';
+  if(!list.length)st.innerHTML='<p class="none">No cards. Try other words, or index a folder first.</p>';
+  list.forEach((x,i)=>{
+    const f=x.f,isOpen=open===f.id,hasPii=ST.piiList(f).length;
+    const el=document.createElement('article');el.className='card'+(isOpen?' on':'');
+    const pct=x.match!=null?x.match+'%':(f.links[0][0]==='unsorted'?'':ST.pct(ST.score(f))+'%');
+    const lift=!!shown[f.id];
+    const text=ST.parseText(f.text).map(s=>s.t==='text'?esc(s.v):`<span class="tape${lift?' off':''}">${lift?esc(s.v):' '.repeat(Math.max(5,Math.round(s.v.length*.85)))}</span>`).join('');
+    el.innerHTML=`<button class="head" aria-expanded="${isOpen}"><span></span><span class="call">${call(f)}</span><span class="pct">${pct}</span></button>
+      <div class="inner">
+        ${ST.isGuess(f)?'<div class="stamp guess">BEST GUESS<small>filed with doubt</small></div>':(f.links[0][0]!=='unsorted'?`<div class="stamp">${x.match!=null?x.match:ST.pct(ST.score(f))}%<small>matched</small></div>`:'')}
+        ${hasPii?'<div class="restrict">RESTRICTED</div>':''}
+        <dl><dt>Title</dt><dd class="tt"></dd><dt>Filed</dt><dd>${ST.primary(f).name}</dd><dt>Subjects</dt><dd>${f.tags.join('; ')}</dd><dt>Kind</dt><dd>${ST.KIND[f.kind]}, ${ST.size(f.bytes)}</dd><dt>Original</dt><dd class="pp" style="font-size:13px;word-break:break-all"></dd></dl>
+        <div class="body">${text}</div>
+        <div class="acts"><button type="button" data-a="reveal">Reveal on disk</button>${hasPii?`<button type="button" data-a="tape">${lift?'Cover with tape':'Lift the tape'}</button>`:''}</div>
+        <span class="hole"></span></div>`;
+    el.querySelector('.head span').textContent=f.title;
+    el.querySelector('.tt').textContent=f.title;el.querySelector('.pp').textContent=ST.path(f);
+    el.querySelector('.head').onclick=()=>{open=isOpen?null:f.id;cards()};
+    el.querySelectorAll('.acts button').forEach(b=>b.onclick=()=>{if(b.dataset.a==='tape'){shown[f.id]=!shown[f.id];cards()}else b.textContent='Opened in Explorer'});
+    st.appendChild(el);
+  });
+}
+$('q').addEventListener('input',()=>{open=null;cab();cards()});
+cab();open=1;cards();
+</script>
+</body>
+</html>

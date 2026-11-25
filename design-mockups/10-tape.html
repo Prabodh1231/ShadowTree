@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree 10 · Tape</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+  /* Concept: trust as a receipt. Indexing prints a thermal receipt of everything the app read,
+     itemised by virtual folder, and the last lines are the proof: files moved 0, bytes written 0. */
+  :root{--bg:#aeb8bf;--printer:#2b3038;--printer2:#3a404a;--paper:#f9f8f4;--ink:#1f2530;--mute:#6f7684;--stamp:#a3261c}
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--ink);font:15px/1.5 "DotGothic16",monospace;min-height:100vh;padding:28px 16px 60px;display:flex;flex-direction:column;align-items:center}
+  .printer{position:sticky;top:12px;z-index:5;width:min(560px,100%);background:var(--printer);border-radius:18px 18px 10px 10px;padding:14px 18px 22px;color:#d6dbe3;box-shadow:0 10px 0 #1d2127,0 18px 30px -10px rgba(0,0,0,.5)}
+  .printer .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .printer .led{width:10px;height:10px;border-radius:50%;background:#4be08a;box-shadow:0 0 8px #4be08a}
+  .printer .led.busy{background:#ffb84b;box-shadow:0 0 8px #ffb84b}
+  .printer .t{font-size:14px;letter-spacing:.06em}
+  .printer button{font:inherit;font-size:14px;background:var(--printer2);color:#fff;border:1px solid #565d6a;border-radius:6px;padding:5px 12px;cursor:pointer}
+  .printer button:hover{background:#4a5160}
+  .printer button:focus-visible,.printer input:focus-visible{outline:2px solid #ffb84b;outline-offset:2px}
+  .printer label{display:flex;gap:6px;align-items:center;cursor:pointer;font-size:14px}
+  .printer .sp{margin-left:auto}
+  .slot{position:absolute;left:5%;right:5%;bottom:-6px;height:12px;background:#0f1216;border-radius:3px}
+  .wrap{position:relative;width:min(420px,100%);margin-top:-2px}
+  .paper{background:var(--paper);padding:26px 24px 44px;font-size:14px;letter-spacing:.015em;position:relative;box-shadow:0 14px 28px -12px rgba(0,0,0,.45);
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),96% 100%,92% calc(100% - 10px),88% 100%,84% calc(100% - 10px),80% 100%,76% calc(100% - 10px),72% 100%,68% calc(100% - 10px),64% 100%,60% calc(100% - 10px),56% 100%,52% calc(100% - 10px),48% 100%,44% calc(100% - 10px),40% 100%,36% calc(100% - 10px),32% 100%,28% calc(100% - 10px),24% 100%,20% calc(100% - 10px),16% 100%,12% calc(100% - 10px),8% 100%,4% calc(100% - 10px),0 100%)}
+  .ln{min-height:21px}
+  .c{text-align:center}
+  .big{font-size:30px;letter-spacing:.2em;line-height:1.2;margin-top:2px}
+  .dash{border-bottom:2px dashed #9aa0ab;margin:9px 0}
+  .dbl{border-bottom:3px double #9aa0ab;margin:9px 0}
+  .mute{color:var(--mute)}
+  .hd{margin-top:6px}
+  .it{all:unset;box-sizing:border-box;display:flex;align-items:baseline;gap:4px;width:100%;cursor:pointer;padding:1px 0}
+  .it:hover{background:#ecebe5}
+  .it:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+  .it .n{white-space:nowrap;max-width:60%;overflow:hidden;text-overflow:ellipsis}
+  .it .d{flex:1;border-bottom:2px dotted #9aa0ab;transform:translateY(-4px);min-width:10px}
+  .it .v{white-space:nowrap}
+  .it .g{color:var(--stamp)}
+  .det{padding:4px 0 8px 14px;border-left:2px solid #c3c7ce;margin:2px 0 6px 4px;white-space:pre-wrap;word-break:break-word;color:#2f3643;font-size:13.5px}
+  .rb{background:var(--ink);color:var(--ink)}
+  .tot{display:flex;gap:4px;align-items:baseline}
+  .tot .d{flex:1;border-bottom:2px dotted #9aa0ab;transform:translateY(-4px)}
+  .zero{font-weight:normal;background:var(--ink);color:var(--paper);padding:0 6px}
+  .sx{display:flex;gap:6px;align-items:baseline}
+  .sx input{flex:1;font:inherit;border:0;border-bottom:2px solid var(--ink);background:transparent;color:var(--ink);padding:0 2px;min-width:0}
+  .sx input:focus{outline:2px solid #2f5e8c;outline-offset:2px}
+  .bars{display:flex;height:46px;gap:0;justify-content:center;margin:14px 0 4px}
+  .bars i{display:block;background:var(--ink);height:100%}
+  .stamp{position:absolute;right:16px;top:290px;border:3px double var(--stamp);color:var(--stamp);padding:0 10px;transform:rotate(-8deg);font-size:18px;letter-spacing:.14em;opacity:.8;pointer-events:none}
+  .proof{position:fixed;left:max(28px,calc(50% - 560px));top:170px;width:230px;color:var(--ink);display:none}
+  .proof b{display:block;font:400 150px/.9 "DotGothic16";letter-spacing:-.04em}
+  .proof span{display:block;font-size:16px;max-width:15ch;line-height:1.3}
+  .proof hr{border:0;border-top:3px double var(--ink);margin:18px 0}
+  @media (min-width:1180px){.proof{display:block}}
+  .ln.in{animation:p .14s ease-out}
+  @keyframes p{from{opacity:0;transform:translateY(-6px)}}
+  @media (prefers-reduced-motion:reduce){.ln.in{animation:none}}
+</style>
+</head>
+<body>
+<div class="printer">
+  <div class="row"><span class="led" id="led"></span><span class="t" id="state">READY</span>
+    <button id="idx" type="button">Index folder</button><button id="again" type="button">Print again</button>
+    <label class="sp"><input type="checkbox" id="cover" checked> Cover personal data</label></div>
+  <span class="slot"></span>
+</div>
+<aside class="proof" aria-hidden="true"><b>0</b><span>files moved, renamed or deleted in your folder</span><hr><span>Open a line to read the file. Cover or uncover personal data with the switch.</span></aside>
+<div class="wrap"><div class="paper" id="paper" aria-live="polite"></div></div>
+<script src="data.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let openId=null,q='',timer=null;
+const money=n=>n;
+function lines(){
+  const L=[];const push=(h,cls='')=>L.push({h,cls});
+  const total=ST.files.length,guess=ST.files.filter(ST.isGuess).length,pii=ST.sensitive().length,uns=ST.files.filter(f=>f.links[0][0]==='unsorted').length;
+  push('SHADOWTREE','c big');push('VIRTUAL FILE SYSTEM','c');push('YOUR FILES STAY WHERE THEY ARE','c mute');push('<div class="dash"></div>');
+  push('FOLDER  '+esc(ST.ROOT.slice(0,-1)),'');push('DATE    2026-11-25 14:02','');push('MACHINE THIS PC, OFFLINE','');push('<div class="dbl"></div>');
+  push(`<div class="sx"><span>SEARCH</span><input id="q" value="${esc(q)}" placeholder="say it in plain words" aria-label="Search files" autocomplete="off"></div>`);
+  push('<div class="dash"></div>');
+  if(q.trim()){
+    const all=ST.search(q),good=all.filter(r=>r.match>=25),weak=all.filter(r=>r.match<25);
+    push('RESULTS: '+esc(q.toUpperCase()),'hd');
+    if(!good.length)push('NOTHING MATCHES. TRY OTHER WORDS.','mute');
+    good.forEach(r=>push(item(r.f,r.match+'%')));
+    if(weak.length){push('<div class="dash"></div>');push('WEAK (UNDER 25)','mute');weak.forEach(r=>push(item(r.f,r.match+'%')))}
+  }else{
+    ST.folders.forEach(fo=>{const l=ST.files.filter(f=>f.links[0][0]===fo.id);if(!l.length)return;
+      push(esc(fo.name.toUpperCase()),'hd');
+      l.forEach(f=>push(item(f,fo.id==='unsorted'?'--':ST.pct(ST.score(f))+'%')));
+      push(`<div class="tot mute"><span>SUBTOTAL</span><span class="d"></span><span>${l.length} ${l.length===1?'FILE':'FILES'}</span></div>`);
+      push('<div class="dash"></div>');
+    });
+  }
+  const tl=(a,b,cls)=>push(`<div class="tot"><span>${a}</span><span class="d"></span><span class="${cls||''}">${b}</span></div>`);
+  push('<div class="dbl"></div>');
+  tl('FILES READ',total);tl('FILED BY MEANING',total-uns);tl('BEST GUESSES',guess);tl('PERSONAL DATA',pii);tl('BASIC SUMMARIES',ST.files.filter(f=>f.ai!=='ok').length);
+  push('<div class="dash"></div>');
+  tl('FILES MOVED','0','zero');tl('FILES RENAMED','0','zero');tl('FILES DELETED','0','zero');tl('BYTES WRITTEN TO YOUR FOLDER','0','zero');
+  push('<div class="dbl"></div>');
+  push('PAID WITH: NOTHING LEFT THIS PC','c');push('THANK YOU. NOTHING WAS TAKEN.','c');
+  push(`<div class="bars" aria-hidden="true">${[3,1,2,1,4,1,1,3,2,1,3,1,2,4,1,2,1,3,1,1,4,2,1,3].map((w,i)=>`<i style="width:${w*2}px;margin-right:${(i%3)+1.5}px"></i>`).join('')}</div>`);
+  push('INDEX '+String(Math.abs(total*7919)).padStart(8,'0'),'c mute');
+  return L;
+}
+function item(f,v){
+  const guess=ST.isGuess(f);
+  const open=openId===f.id;
+  let h=`<button class="it" data-id="${f.id}" aria-expanded="${open}"><span class="n">${esc(f.title.toUpperCase())}</span><span class="d"></span><span class="v${guess?' g':''}">${guess?'~':''}${v}</span></button>`;
+  if(open){
+    const cover=$('cover').checked;
+    const txt=ST.parseText(f.text).map(s=>s.t==='text'?esc(s.v):(cover?`<span class="rb">${'█'.repeat(Math.max(3,s.v.length))}</span>`:esc(s.v))).join('');
+    h+=`<div class="det">${esc(f.name)}\n${esc(ST.size(f.bytes))}  ${esc(ST.KIND[f.kind].toUpperCase())}${guess?'\n~ BEST GUESS, UNDER 50%':''}${ST.piiList(f).length?'\nPERSONAL DATA: '+ST.piiList(f).length+' ITEMS':''}\n\n${ST.piiList(f).length&&cover?'(SUMMARY HIDDEN)':esc(f.summary)}\n\n${txt}\n\nREVEAL: explorer /select,\n${esc(ST.path(f))}</div>`;
+  }
+  return h;
+}
+function paint(anim){
+  const L=lines(),p=$('paper');clearInterval(timer);
+  const render=n=>{p.innerHTML=L.slice(0,n).map((l,i)=>`<div class="ln ${l.cls}${anim&&i===n-1?' in':''}">${l.h}</div>`).join('');bind()};
+  if(!anim||matchMedia('(prefers-reduced-motion:reduce)').matches){render(L.length);$('led').className='led';$('state').textContent='READY';return}
+  let n=0;$('led').className='led busy';$('state').textContent='PRINTING';
+  timer=setInterval(()=>{n++;render(n);if(n>=L.length){clearInterval(timer);$('led').className='led';$('state').textContent='READY'}},38);
+}
+function bind(){
+  document.querySelectorAll('.it').forEach(b=>b.onclick=()=>{openId=openId===+b.dataset.id?null:+b.dataset.id;const y=scrollY;paint(false);scrollTo(0,y)});
+  const qi=$('q');if(qi)qi.oninput=e=>{q=e.target.value;openId=null;const pos=e.target.selectionStart;paint(false);const n=$('q');n.focus();n.setSelectionRange(pos,pos)};
+}
+$('cover').onchange=()=>paint(false);
+$('again').onclick=()=>{q='';openId=null;paint(true)};
+$('idx').onclick=()=>{q='';openId=null;paint(true)};
+paint(true);
+</script>
+</body>
+</html>

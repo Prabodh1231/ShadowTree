@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree · Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="data.js"></script>
+<script src="kit.js"></script>
+<style>
+/* Studio: a code editor layout. Activity bar, explorer tree, tabs, editor with line numbers, a problems panel,
+   a status bar. Personal data is a warning squiggle, exactly where a linter would put it. */
+:root{--bg:#f7f6fb;--side:#efedf7;--act:#2a2250;--actink:#c9c2ee;--ink:#25213a;--mute:#756f92;--line:#dcd8ec;--tab:#e7e4f3;--acc:#6d4fe0;--warn:#c2255c;--stat:#6d4fe0}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font:13px/1.4 "IBM Plex Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.ws{display:grid;grid-template-columns:52px 300px 1fr;grid-template-rows:1fr 24px;height:100vh}
+.act{background:var(--act);display:flex;flex-direction:column;align-items:center;padding-top:6px;gap:2px;grid-row:1}
+.act button{width:52px;height:50px;display:grid;place-items:center;color:var(--actink);opacity:.65;border-left:2px solid transparent}
+.act button:hover{opacity:1}.act button[aria-current=true]{opacity:1;border-color:#fff;color:#fff}
+.act .b{margin-top:auto;margin-bottom:8px}
+.sb{background:var(--side);display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--line);grid-row:1}
+.sb .tt{font-size:11.5px;font-weight:600;letter-spacing:.04em;color:var(--mute);padding:12px 16px 8px;text-transform:none;display:flex;align-items:center}
+.sb .tt span{margin-left:auto;display:flex;gap:4px}
+.sb .tt button{width:24px;height:24px;display:grid;place-items:center;border-radius:4px;color:var(--mute)}.sb .tt button:hover{background:#0001}
+.find{margin:0 12px 8px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:3px;padding:0 8px;height:28px}
+.find:focus-within{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.find input{flex:1;border:0;outline:0;background:none;font:inherit;min-width:0}.find .ic{color:var(--mute)}
+.tree{overflow:auto;flex:1;padding-bottom:10px}
+.tr{display:flex;align-items:center;gap:6px;height:24px;padding:0 10px;width:100%;text-align:left;white-space:nowrap;border-left:2px solid transparent}
+.tr:hover{background:#0000000a}
+.tr[aria-selected=true]{background:#dcd5f7;border-color:var(--acc)}
+.tr:focus-visible{outline:1px solid var(--acc);outline-offset:-1px}
+.tr .ic{color:var(--mute)}
+.tr .n{margin-left:auto;font-size:11px;color:var(--mute)}
+.tr.fo{font-weight:600;color:var(--ink)}
+.tr.fi{padding-left:30px}
+.tr .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.tr .bd{font-size:10.5px;font-weight:600;padding:0 5px;border-radius:3px;margin-left:auto}
+.tr .bd.w{color:var(--warn)}.tr .bd.g{color:#a56a00}
+.tr .nm{overflow:hidden;text-overflow:ellipsis}
+.ed{display:flex;flex-direction:column;min-width:0;min-height:0;grid-row:1}
+.tabs{display:flex;background:var(--tab);height:36px;overflow:hidden}
+.tab{display:flex;align-items:center;gap:8px;padding:0 14px;border-right:1px solid var(--line);color:var(--mute);height:100%;white-space:nowrap;font-size:13px;border-top:2px solid transparent}
+.tab[aria-selected=true]{background:var(--bg);color:var(--ink);border-top-color:var(--acc)}
+.tab .x{opacity:.5}.tab:hover .x{opacity:1}
+.crumbs{height:26px;display:flex;align-items:center;gap:6px;padding:0 16px;color:var(--mute);font-size:12px}
+.crumbs .ic{margin:0 -2px}
+.tool{margin-left:auto;display:flex;align-items:center;gap:10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:#fff}
+.seg button{padding:2px 10px;font-size:12px}.seg button[aria-pressed=true]{background:var(--acc);color:#fff}
+.code{flex:1;overflow:auto;font:13.5px/22px "JetBrains Mono",Consolas,monospace;padding:4px 0}
+.ln{display:grid;grid-template-columns:56px 1fr;padding-right:20px}
+.ln:hover{background:#6d4fe00d}
+.ln i{font-style:normal;color:#a39ec0;text-align:right;padding-right:18px;user-select:none}
+.ln span{white-space:pre-wrap;word-break:break-word;min-height:22px}
+mark.pii{background:none;color:inherit;font:inherit;border-radius:2px;cursor:help}
+mark.pii.r{background:#2a2250;color:#fff;padding:0 2px}
+mark.pii.o{background:#fbd5e3;text-decoration:underline wavy var(--warn) 1px;text-underline-offset:3px;padding:0 2px}
+b.hit{background:#ffe58a;font-weight:inherit}
+.doc{padding:6px 0 12px 56px;color:#4b4668;font:13px/1.6 "IBM Plex Sans";max-width:760px}
+.doc .h{color:var(--mute);font-size:12px}
+.lens{padding:2px 0 8px 56px;font:12px "IBM Plex Sans";color:var(--mute);display:flex;gap:16px}
+.lens button{color:var(--acc)}.lens button:hover{text-decoration:underline}
+.panel{height:210px;border-top:1px solid var(--line);background:var(--side);display:flex;flex-direction:column}
+.ptabs{display:flex;gap:2px;padding:0 10px;height:32px;align-items:flex-end;font-size:12px}
+.ptabs button{padding:6px 10px;color:var(--mute);border-bottom:2px solid transparent;display:flex;gap:6px;align-items:center}
+.ptabs button[aria-selected=true]{color:var(--ink);border-color:var(--acc)}
+.ptabs .cnt{background:var(--acc);color:#fff;border-radius:9px;padding:0 6px;font-size:10.5px;font-weight:600}
+.plist{overflow:auto;flex:1;padding:4px 0;font-size:12.5px}
+.pr{display:flex;gap:10px;align-items:center;padding:3px 16px;cursor:pointer;width:100%;text-align:left}
+.pr:hover{background:#0000000a}
+.pr .ic{color:var(--warn)}.pr em{font-style:normal;color:var(--mute);margin-left:auto}
+.pr.g .ic{color:#a56a00}
+.stat{grid-column:1/-1;background:var(--stat);color:#fff;display:flex;align-items:center;padding:0 12px;gap:18px;font-size:12px}
+.stat span{display:flex;gap:6px;align-items:center}.stat .r{margin-left:auto;display:flex;gap:18px}
+.stat button{display:flex;gap:6px;align-items:center;height:24px;padding:0 8px;color:#fff}.stat button:hover{background:#fff3}
+.empty{padding:60px 30px;color:var(--mute);text-align:center;font-size:13px;line-height:1.7}
+#toast{background:#2a2250;font-family:"IBM Plex Sans"}
+@media (max-width:900px){.ws{grid-template-columns:52px 1fr}.ed{display:none}}
+</style>
+</head>
+<body>
+<div class="ws">
+  <nav class="act" aria-label="Views">
+    <button id="a1" aria-current="true" aria-label="Files" title="Files"></button><button id="a2" aria-label="Search" title="Search"></button><button id="a3" aria-label="Personal data" title="Personal data"></button>
+    <button class="b" id="a4" aria-label="Settings" title="Settings"></button>
+  </nav>
+  <aside class="sb">
+    <div class="tt">EXPLORER<span><button id="nf" aria-label="New folder" title="New folder"></button><button id="rf" aria-label="Index (Read-Only)" title="Index (Read-Only)"></button></span></div>
+    <label class="find"><span id="si"></span><input id="q" placeholder="Search your files" aria-label="Search your files" autocomplete="off"></label>
+    <div class="tree" id="tree" role="tree" aria-label="Files"></div>
+  </aside>
+  <main class="ed">
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="code" id="code"></div>
+    <section class="panel"><div class="ptabs" id="ptabs" role="tablist"></div><div class="plist" id="plist"></div></section>
+  </main>
+  <div class="stat"><span id="s1"></span><span id="s2"></span><div class="r"><span id="s3"></span><span id="s4"></span></div></div>
+</div>
+<script>
+const {S,$,$$,icon,esc,FCOL}=KIT;
+let q='',open=[4,1],cur=4,red=true,shut={},ptab='pii';
+$('#a1').innerHTML=icon('file',24);$('#a2').innerHTML=icon('search',24);$('#a3').innerHTML=icon('shield',24);$('#a4').innerHTML=icon('gear',24);
+$('#si').innerHTML=icon('search',14);$('#nf').innerHTML=icon('plus',15);$('#rf').innerHTML=icon('refresh',15);
+$('#a3').onclick=()=>{ptab='pii';draw()};$('#a2').onclick=()=>$('#q').focus();
+$('#nf').onclick=()=>KIT.toast('Created “New folder”. Sorting your files into it…');
+$('#rf').onclick=()=>{KIT.toast('Indexing (read-only)…');KIT.scan(()=>{},()=>KIT.toast('Indexed 13 files. Nothing was changed.'))};
+function tree(){
+  const hits=q.trim()?KIT.run(q):null;const ok=hits&&new Set(hits.hits.map(h=>h.f.id));const m=hits&&Object.fromEntries(hits.hits.map(h=>[h.f.id,h.match]));
+  let h='';
+  S.folders.forEach(fo=>{
+    const fs=S.inFolder(fo.id).filter(f=>S.primary(f).id===fo.id&&(!ok||ok.has(f.id)));
+    if(ok&&!fs.length)return;
+    h+=`<button class="tr fo" role="treeitem" aria-expanded="${!shut[fo.id]}" data-fo="${fo.id}">${icon(shut[fo.id]?'chevR':'chevD',13)}${icon('folder',15)}${esc(fo.name)}<span class="n">${fs.length}</span></button>`;
+    if(!shut[fo.id])fs.forEach(f=>{h+=`<button class="tr fi" role="treeitem" data-id="${f.id}" aria-selected="${f.id===cur}"><span class="dot" style="background:${FCOL[fo.id]}"></span><span class="nm">${esc(f.name)}</span>${ok?`<span class="bd">${m[f.id]}%</span>`:KIT.pii(f)?'<span class="bd w">P</span>':S.isGuess(f)?'<span class="bd g">?</span>':''}</button>`});
+  });
+  if(!h)h=`<div class="empty">No files match “${esc(q)}”.</div>`;
+  $('#tree').innerHTML=h;
+  $$('#tree [data-fo]').forEach(b=>b.onclick=()=>{shut[b.dataset.fo]=!shut[b.dataset.fo];tree()});
+  $$('#tree [data-id]').forEach(b=>b.onclick=()=>{openF(+b.dataset.id)});
+  tree.vis=$$('#tree [data-id]').map(b=>+b.dataset.id);
+}
+function openF(id){if(!open.includes(id))open.push(id);cur=id;draw()}
+function closeF(id){open=open.filter(x=>x!==id);if(cur===id)cur=open[open.length-1]??null;draw()}
+function editor(){
+  $('#tabs').innerHTML=open.map(id=>{const f=S.byId[id];return `<button class="tab" role="tab" aria-selected="${id===cur}" data-t="${id}">${icon(KIT.kindIcon(f),14)}${esc(f.name)}<span class="x" data-x="${id}">${icon('x',12)}</span></button>`}).join('');
+  $$('#tabs .tab').forEach(t=>t.onclick=e=>{if(e.target.closest('[data-x]')){closeF(+e.target.closest('[data-x]').dataset.x)}else{cur=+t.dataset.t;draw()}});
+  const f=cur&&S.byId[cur];
+  if(!f){$('#crumbs').innerHTML='';$('#code').innerHTML='<div class="empty" style="padding-top:120px">Open a file from the explorer.<br>Personal data shows as warnings, like lint errors.</div>';return}
+  const fo=S.primary(f);
+  $('#crumbs').innerHTML=`${icon('tree',13)}ShadowTree${icon('chevR',12)}${esc(fo.name)}${icon('chevR',12)}${esc(f.name)}<div class="tool"><div class="seg" role="group" aria-label="Text view"><button id="vr" aria-pressed="${red}">Redacted</button><button id="vo" aria-pressed="${!red}">Original</button></div></div>`;
+  $('#vr').onclick=()=>{red=true;draw()};$('#vo').onclick=()=>{red=false;draw()};
+  const L=KIT.lines(f,red);
+  $('#code').innerHTML=`<div class="doc"><span class="h">Summary${f.ai==='fallback'?' (basic)':''}</span><br>${esc(f.summary)}</div>
+  <div class="lens"><span>Filed in ${esc(fo.name)} · ${S.pct(S.score(f))}%${S.isGuess(f)?' · best guess':''}</span><button data-rv>Reveal on Disk</button><button data-cp>Copy path</button></div>`+
+   L.map((t,i)=>`<div class="ln" data-l="${i+1}"><i>${i+1}</i><span>${q?t.replace(/(^|>)([^<]+)(?=<|$)/g,(a,b,c)=>b+KIT.hl(c.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>'),q)):t}</span></div>`).join('');
+  $('[data-rv]').onclick=()=>KIT.toast('Revealed in Windows Explorer');$('[data-cp]').onclick=()=>KIT.toast('Path copied');
+}
+function problems(){
+  const f=cur&&S.byId[cur];
+  const mine=f?S.piiList(f):[];
+  const all=S.sensitive();
+  const g=S.files.filter(S.isGuess);
+  $('#ptabs').innerHTML=`<button role="tab" aria-selected="${ptab==='pii'}" data-p="pii">Personal data <span class="cnt">${mine.length}</span></button><button role="tab" aria-selected="${ptab==='all'}" data-p="all">All files <span class="cnt">${all.length}</span></button><button role="tab" aria-selected="${ptab==='guess'}" data-p="guess">Best guesses <span class="cnt">${g.length}</span></button>`;
+  $$('#ptabs [data-p]').forEach(b=>b.onclick=()=>{ptab=b.dataset.p;problems()});
+  let h='';
+  if(ptab==='pii'){const cnt={};h=mine.length?S.parseText(f.text).filter(s=>s.t==='pii').map((s,i)=>{cnt[s.type]=(cnt[s.type]||0)+1;return `<button class="pr"><span>${icon('info',14)}</span>${red?`[${s.type}_${cnt[s.type]}]`:esc(s.v)} is a ${KIT.nice(s.type)}<em>${esc(f.name)}</em></button>`}).join(''):`<div class="empty">No personal data found in ${f?esc(f.name):'this file'}.</div>`}
+  if(ptab==='all')h=all.map(x=>`<button class="pr" data-o="${x.id}">${icon('info',14)}${esc(x.name)}: ${KIT.nice(S.piiTypes(x)[0])}${S.piiTypes(x).length>1?' and '+(S.piiTypes(x).length-1)+' more kind'+(S.piiTypes(x).length>2?'s':''):''}<em>${S.piiList(x).length} found</em></button>`).join('');
+  if(ptab==='guess')h=g.map(x=>`<button class="pr g" data-o="${x.id}">${icon('help',14)}${esc(x.name)} is filed in ${esc(S.primary(x).name)} but only ${S.pct(S.score(x))}% sure<em>Best guess</em></button>`).join('');
+  $('#plist').innerHTML=h;$$('#plist [data-o]').forEach(b=>b.onclick=()=>openF(+b.dataset.o));
+}
+function status(){
+  const f=cur&&S.byId[cur];
+  $('#s1').innerHTML=icon('tree',13)+' Virtual view';$('#s2').innerHTML=`${icon('lock',13)} Read-only · 0 files changed`;
+  $('#s3').innerHTML=f?`<span>${S.size(f.bytes)}</span><span>${f.ai==='ok'?'AI summary':'Basic summary'}</span>`:'';
+  $('#s4').innerHTML='<span>'+(red?'Redacted':'Original')+'</span>';
+}
+function draw(){tree();editor();problems();status()}
+$('#q').oninput=e=>{q=e.target.value;draw()};
+addEventListener('keydown',e=>{
+  if((e.ctrlKey&&e.key==='p')||(e.ctrlKey&&e.shiftKey&&e.key==='F')){e.preventDefault();$('#q').focus();return}
+  if(e.ctrlKey&&e.key==='w'){e.preventDefault();if(cur)closeF(cur);return}
+  if(document.activeElement===$('#q')){if(e.key==='Enter'&&tree.vis.length)openF(tree.vis[0]);if(e.key==='Escape'){q='';$('#q').value='';draw()}return}
+  const v=tree.vis||[];let i=v.indexOf(cur);
+  if(e.key==='ArrowDown'){e.preventDefault();openF(v[Math.min(v.length-1,i+1)])}
+  if(e.key==='ArrowUp'){e.preventDefault();openF(v[Math.max(0,i-1)])}
+});
+draw();
+</script>
+</body>
+</html>

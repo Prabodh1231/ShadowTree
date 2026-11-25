@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree · Gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="data.js"></script>
+<script src="kit.js"></script>
+<style>
+/* Gallery: the file manager's gallery view. A big preview, a filmstrip underneath, an info pane on the right.
+   Left and right arrows walk the strip, Space opens a full-size look. Graphite window, paper pages. */
+:root{--bg:#2d2f35;--side:#26282d;--bar:#34363d;--ink:#eceef3;--mute:#a0a5b2;--line:#43464f;--acc:#9d8cff;--paper:#fbf9f4;--pii:#d63c7a}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font:14px/1.4 "DM Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.win{display:grid;grid-template-columns:220px 1fr 300px;grid-template-rows:54px 1fr;height:100vh}
+.tb{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--bar);border-bottom:1px solid #1c1d21}
+.tb .lights{display:flex;gap:8px;margin-right:10px}.tb .lights i{width:12px;height:12px;border-radius:50%;background:#ff5f57}.tb .lights i:nth-child(2){background:#febc2e}.tb .lights i:nth-child(3){background:#28c840}
+.nb{width:30px;height:30px;border-radius:6px;display:grid;place-items:center;color:var(--mute)}.nb:hover{background:#ffffff14}.nb[disabled]{opacity:.35}
+.tb h1{font:700 15px "DM Sans";display:flex;gap:10px;align-items:baseline}.tb h1 small{font-weight:400;color:var(--mute);font-size:12.5px}
+.vs{display:inline-flex;background:#00000033;border-radius:7px;padding:2px;margin-left:24px}
+.vs button{width:34px;height:26px;display:grid;place-items:center;border-radius:5px;color:var(--mute)}
+.vs button[aria-pressed=true]{background:#ffffff26;color:var(--ink)}
+.tb .r{margin-left:auto;display:flex;align-items:center;gap:12px}
+.seg{display:inline-flex;background:#00000033;border-radius:7px;padding:2px}
+.seg button{padding:4px 12px;border-radius:5px;font-size:13px;color:var(--mute)}
+.seg button[aria-pressed=true]{background:#ffffff26;color:var(--ink);font-weight:500}
+.sch{display:flex;align-items:center;gap:8px;height:30px;width:230px;background:#00000033;border-radius:7px;padding:0 10px;border:1px solid transparent}
+.sch:focus-within{border-color:var(--acc);box-shadow:0 0 0 3px #9d8cff33}
+.sch input{flex:1;border:0;outline:0;background:none;color:var(--ink);font:inherit;min-width:0}.sch .ic{color:var(--mute)}
+.sch input::placeholder{color:#7f8492}
+.side{background:var(--side);padding:12px 10px;overflow:auto}
+.side h3{font-size:11.5px;font-weight:700;color:#7f8492;padding:14px 10px 5px}
+.si{display:flex;align-items:center;gap:10px;width:100%;height:30px;padding:0 10px;border-radius:6px;text-align:left}
+.si:hover{background:#ffffff0d}
+.si[aria-current=true]{background:#ffffff1f}
+.si .ic{color:var(--acc)}.si .n{margin-left:auto;font-size:12px;color:var(--mute)}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;margin:0 2px}
+.si:focus-visible,.fs:focus-visible,.li:focus-visible,.ic2:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
+.ctr{display:flex;flex-direction:column;min-width:0;min-height:0}
+.stage{flex:1;display:grid;place-items:center;padding:26px;min-height:0;position:relative}
+.sheet{width:min(560px,100%);max-height:100%;overflow:auto;background:var(--paper);color:#26231d;border-radius:4px;padding:34px 40px;box-shadow:0 18px 50px #0008,0 2px 6px #0006;font:13.5px/1.75 "IBM Plex Mono",monospace;white-space:pre-wrap;word-break:break-word}
+.sheet h2{font:700 21px/1.2 "DM Sans";letter-spacing:-.01em;margin-bottom:4px;color:#17140f;white-space:normal}
+.sheet .sm{font:13px/1.5 "DM Sans";color:#6f6a5e;margin-bottom:18px;white-space:normal}
+.sheet.img{background:linear-gradient(160deg,#cdd7e2,#a7b4c4 60%,#8d9bb0)}
+.sheet.img .cap{background:#fffd;border-radius:3px;padding:14px 16px;margin-top:8px}
+.wave{display:flex;align-items:center;gap:3px;height:80px;margin:6px 0 16px}.wave i{width:4px;border-radius:2px;background:#6b5dd0}
+mark.pii{padding:0 3px;border-radius:2px}mark.pii.r{background:#1c1a15;color:#fbf9f4}mark.pii.o{background:#ffd3e3;color:#a3174a}
+b.hit{background:#ffe58a;font-weight:inherit}
+.strip{height:176px;border-top:1px solid #1c1d21;background:#25272c;display:flex;align-items:center;gap:12px;padding:0 18px;overflow-x:auto;overflow-y:hidden}
+.fs{flex:none;width:112px;text-align:center;padding:6px 6px 8px;border-radius:8px}
+.fs:hover{background:#ffffff0d}
+.fs[aria-selected=true]{background:#ffffff1a;box-shadow:0 0 0 2px var(--acc)}
+.th{height:112px;background:var(--paper);border-radius:3px;margin-bottom:6px;padding:8px 9px;font:5.5px/1.5 "IBM Plex Mono",monospace;color:#6a6559;overflow:hidden;text-align:left;white-space:pre-wrap;word-break:break-all;box-shadow:0 2px 6px #0006;position:relative}
+.th mark{background:#1c1a15;color:transparent;border-radius:1px}.th mark.o{background:#ffd3e3;color:#a3174a}
+.th.im{background:linear-gradient(160deg,#cdd7e2,#8d9bb0);display:grid;place-items:center;color:#4a566a}
+.th.au{display:flex;align-items:center;justify-content:center;gap:2px}.th.au i{width:3px;border-radius:2px;background:#6b5dd0}
+.th .flag{position:absolute;right:4px;top:4px;display:flex;gap:3px}.th .flag i{width:9px;height:9px;border-radius:50%;background:var(--pii)}.th .flag i.g{background:#e8a317}
+.fs span{display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+.info{background:var(--side);padding:20px 18px;overflow:auto;border-left:1px solid #1c1d21}
+.info h3{font:700 16px/1.3 "DM Sans";margin-bottom:2px}
+.info .k{color:var(--mute);font-size:12.5px;margin-bottom:12px}
+.info h4{font-size:12px;color:#7f8492;font-weight:700;padding:14px 0 6px;border-top:1px solid var(--line);margin-top:12px}
+.info dl{display:grid;grid-template-columns:78px 1fr;gap:6px 8px;font-size:13px}.info dt{color:var(--mute)}.info dd{margin:0;overflow-wrap:anywhere}
+.tg{display:flex;flex-wrap:wrap;gap:5px}.tg span{font-size:11.5px;background:#ffffff14;border-radius:5px;padding:1px 8px}
+.chip{font-size:11px;font-weight:700;padding:1px 7px;border-radius:8px;margin-left:6px}.chip.p{background:#d63c7a33;color:#ff9ac0}.chip.g{background:#e8a31733;color:#ffd27a}
+.ab{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.bt{height:32px;padding:0 14px;border-radius:7px;background:#ffffff14;font-weight:500;font-size:13px;display:flex;align-items:center;gap:7px}.bt:hover{background:#ffffff22}
+.bt.p{background:var(--acc);color:#17133a;font-weight:700}.bt.p:hover{background:#b0a2ff}
+.stat{font-size:12px;color:var(--mute);display:flex;gap:6px;align-items:center;margin-top:18px}
+/* list + icons */
+.alt{flex:1;overflow:auto;padding:12px 18px}
+.li{display:grid;grid-template-columns:28px 1fr 160px 80px 80px;gap:12px;align-items:center;height:36px;padding:0 12px;border-radius:6px;width:100%;text-align:left}
+.li:nth-child(even){background:#ffffff08}.li:hover{background:#ffffff12}.li[aria-selected=true]{background:var(--acc);color:#17133a}
+.li[aria-selected=true] .mu{color:#17133a99}.mu{color:var(--mute)}
+.ig{display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
+.ql{position:fixed;inset:0;background:#000b;display:none;z-index:20;align-items:center;justify-content:center;padding:40px}
+.ql.on{display:flex}
+.ql .sheet{width:min(760px,100%);max-height:100%;font-size:15px}
+.ql .x{position:absolute;top:18px;right:22px}
+.empty{padding:70px 30px;color:var(--mute);text-align:center}
+#toast{background:#eceef3;color:#1c1d21;font-family:"DM Sans"}
+@media (max-width:1100px){.win{grid-template-columns:200px 1fr}.info{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="win">
+  <header class="tb">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <button class="nb" id="bk" aria-label="Back"></button><button class="nb" id="fw" aria-label="Forward" disabled></button>
+    <h1 id="tt"></h1>
+    <div class="vs" role="group" aria-label="View"><button id="v1" aria-label="Icons" title="Icons"></button><button id="v2" aria-label="List" title="List"></button><button id="v3" aria-label="Gallery" title="Gallery"></button></div>
+    <div class="r"><div class="seg" role="group" aria-label="Text view"><button id="vr" aria-pressed="true">Redacted</button><button id="vo" aria-pressed="false">Original</button></div><button class="nb" id="idx" aria-label="Index (Read-Only)" title="Index (Read-Only)"></button><button class="nb" id="nf" aria-label="New folder" title="New folder"></button>
+      <label class="sch"><span id="si"></span><input id="q" placeholder="Search" aria-label="Search your files" autocomplete="off"></label></div>
+  </header>
+  <nav class="side" id="side" aria-label="Folders"></nav>
+  <main class="ctr" id="ctr"></main>
+  <aside class="info" id="info" aria-label="Information"></aside>
+</div>
+<div class="ql" id="ql" role="dialog" aria-label="Full size look"></div>
+<script>
+const {S,$,$$,icon,esc,FCOL}=KIT;
+let nav='all',q='',sel=null,red=true,view='gallery';
+$('#bk').innerHTML=icon('chevL',17);$('#fw').innerHTML=icon('chevR',17);$('#si').innerHTML=icon('search',14);$('#idx').innerHTML=icon('refresh',16);$('#nf').innerHTML=icon('plus',17);
+$('#v1').innerHTML=icon('grid',16);$('#v2').innerHTML=icon('list',16);$('#v3').innerHTML=icon('image',16);
+const NM={all:'All files',pii:'Sensitive',guess:'Needs a look'};
+function items(){
+  if(q.trim()){const r=KIT.run(q);return {L:r.hits.map(h=>({f:h.f,m:h.match})),t:`Search: ${q}`,weak:r.weak}}
+  const F=nav==='all'?S.files:nav==='pii'?S.sensitive():nav==='guess'?S.files.filter(S.isGuess):S.inFolder(nav);
+  return {L:F.map(f=>({f,m:Math.round((S.fById[nav]?f.links.find(l=>l[0]===nav)[1]:S.score(f))*100)})),t:NM[nav]||S.fById[nav].name,weak:0};
+}
+function side(){
+  $('#side').innerHTML=`<h3>Favourites</h3>`+[['all','tree'],['pii','shield'],['guess','help']].map(([id,ic])=>`<button class="si" data-n="${id}" aria-current="${!q&&nav===id}">${icon(ic,16)}${NM[id]}<span class="n">${id==='all'?13:id==='pii'?S.sensitive().length:S.files.filter(S.isGuess).length}</span></button>`).join('')+
+  `<h3>Folders</h3>`+S.folders.map(f=>`<button class="si" data-n="${f.id}" aria-current="${!q&&nav===f.id}"><i class="dot" style="background:${FCOL[f.id]}"></i>${esc(f.name)}<span class="n">${S.inFolder(f.id).length}</span></button>`).join('')+
+  `<h3>Locations</h3><button class="si" id="dk">${icon('disk',16)}sample_messy_folder</button><div style="padding:14px 10px;font-size:12px;color:#7f8492;line-height:1.5">Folders here are a view. Files stay where they are on disk.</div>`;
+  $$('#side [data-n]').forEach(b=>b.onclick=()=>{nav=b.dataset.n;q='';$('#q').value='';sel=null;draw()});
+  $('#dk').onclick=()=>KIT.toast('Opens the real folder. Nothing in it has changed.');
+}
+function thumb(f){
+  const fl=`<span class="flag">${KIT.pii(f)?'<i></i>':''}${S.isGuess(f)?'<i class="g"></i>':''}</span>`;
+  if(f.kind==='image')return `<div class="th im">${icon('image',30)}${fl}</div>`;
+  if(f.kind==='audio')return `<div class="th au">${[10,26,16,38,22,44,18,30,12,24].map(h=>`<i style="height:${h}px"></i>`).join('')}${fl}</div>`;
+  return `<div class="th">${S.parseText(f.text).map(s=>s.t==='text'?esc(s.v):red?`<mark>${'x'.repeat(s.v.length)}</mark>`:`<mark class="o">${esc(s.v)}</mark>`).join('')}${fl}</div>`;
+}
+function sheet(f,big){
+  const fo=S.primary(f);
+  const b=KIT.body(f,red,q);
+  if(f.kind==='image')return `<div class="sheet img"><h2>${esc(f.title)}</h2><div class="sm">Picture · text found by reading it</div><div class="cap">${b}</div></div>`;
+  if(f.kind==='audio')return `<div class="sheet"><h2>${esc(f.title)}</h2><div class="sm">Recording · transcript</div><div class="wave">${Array.from({length:44},(_,i)=>`<i style="height:${14+Math.abs(Math.sin(i*.7)*Math.cos(i*.23))*60}px"></i>`).join('')}</div>${b}</div>`;
+  return `<div class="sheet"><h2>${esc(f.title)}</h2><div class="sm">${esc(f.summary)}</div>${b}</div>`;
+}
+function draw(){
+  side();const it=items();const L=it.L;draw.L=L;
+  if(!L.some(r=>r.f.id===sel))sel=L[0]?L[0].f.id:null;
+  $('#tt').innerHTML=`${esc(it.t)}<small>${L.length} item${L.length===1?'':'s'}${it.weak?` · ${it.weak} weak hidden`:''}</small>`;
+  ['1','2','3'].forEach((n,i)=>$('#v'+n).setAttribute('aria-pressed',String(view===['icons','list','gallery'][i])));
+  let h;
+  if(!L.length)h=`<div class="empty">${q?`Nothing matches “${esc(q)}”.`:'Nothing here.'}</div>`;
+  else if(view==='gallery'){const r=L.find(x=>x.f.id===sel);
+    h=`<div class="stage">${sheet(r.f)}</div><div class="strip" id="strip" role="listbox" aria-label="Files">${L.map(x=>`<button class="fs" role="option" data-id="${x.f.id}" aria-selected="${x.f.id===sel}">${thumb(x.f)}<span>${esc(x.f.name)}</span></button>`).join('')}</div>`}
+  else if(view==='list')h=`<div class="alt" role="listbox">${L.map(x=>`<button class="li" role="option" data-id="${x.f.id}" aria-selected="${x.f.id===sel}">${icon(KIT.kindIcon(x.f),16)}<span>${esc(x.f.name)}</span><span class="mu">${esc(S.primary(x.f).short)}</span><span class="mu">${x.m}%</span><span class="mu">${S.size(x.f.bytes)}</span></button>`).join('')}</div>`;
+  else h=`<div class="alt"><div class="ig" role="listbox">${L.map(x=>`<button class="fs" role="option" data-id="${x.f.id}" aria-selected="${x.f.id===sel}">${thumb(x.f)}<span>${esc(x.f.name)}</span></button>`).join('')}</div></div>`;
+  $('#ctr').innerHTML=h;
+  $$('#ctr [data-id]').forEach(b=>{b.onclick=()=>{sel=+b.dataset.id;draw()};b.ondblclick=()=>ql()});
+  const s=$('#strip');const cur=$('#strip [aria-selected=true]');if(cur&&s)s.scrollLeft=cur.offsetLeft-s.clientWidth/2+60;
+  inspector();
+}
+function inspector(){
+  const r=draw.L.find(x=>x.f.id===sel);const p=$('#info');
+  if(!r){p.innerHTML='';return}
+  const f=r.f,fo=S.primary(f);
+  p.innerHTML=`<h3>${esc(f.title)}</h3><div class="k">${S.KIND[f.kind]} · ${S.size(f.bytes)}${KIT.pii(f)?'<span class="chip p">Personal data</span>':''}${S.isGuess(f)?'<span class="chip g">Best guess</span>':''}</div>
+  <p style="font-size:13px;line-height:1.5;color:#d3d6df">${esc(f.summary)}</p>
+  <h4>Information</h4><dl><dt>Filed in</dt><dd><i class="dot" style="background:${FCOL[fo.id]};display:inline-block;margin:0 6px 0 0"></i>${esc(fo.name)}</dd><dt>Match</dt><dd>${r.m}%</dd><dt>Name</dt><dd>${esc(f.name)}</dd><dt>Where</dt><dd>${esc(S.path(f))}</dd><dt>Summary</dt><dd>${f.ai==='ok'?'AI':'Basic'}</dd></dl>
+  <h4>Tags</h4><div class="tg">${f.tags.map(t=>`<span>${esc(t)}</span>`).join('')}</div>
+  <div class="ab"><button class="bt p" id="rv">${icon('open',15)}Reveal on Disk</button><button class="bt" id="cp">Copy path</button></div>
+  <div class="stat">${icon('lock',13)} Read-only. Nothing is written to your disk.</div>`;
+  $('#rv').onclick=()=>KIT.toast('Revealed in Windows Explorer');$('#cp').onclick=()=>KIT.toast('Path copied');
+}
+function ql(){const f=S.byId[sel];if(!f)return;$('#ql').innerHTML=`<button class="bt x" id="qx">${icon('x',16)}Close</button>${sheet(f,1)}`;$('#ql').classList.add('on');$('#qx').onclick=()=>$('#ql').classList.remove('on')}
+function setRed(v){red=v;$('#vr').setAttribute('aria-pressed',v);$('#vo').setAttribute('aria-pressed',!v);draw();if($('#ql').classList.contains('on'))ql()}
+$('#vr').onclick=()=>setRed(true);$('#vo').onclick=()=>setRed(false);
+$('#v1').onclick=()=>{view='icons';draw()};$('#v2').onclick=()=>{view='list';draw()};$('#v3').onclick=()=>{view='gallery';draw()};
+$('#q').oninput=e=>{q=e.target.value;draw()};
+$('#idx').onclick=()=>{KIT.toast('Indexing (read-only)…');KIT.scan(()=>{},()=>KIT.toast('Indexed 13 files. Nothing was changed.'))};
+$('#nf').onclick=()=>KIT.toast('Created “New folder”. Sorting your files into it…');
+$('#bk').onclick=()=>{nav='all';q='';$('#q').value='';draw()};
+addEventListener('keydown',e=>{
+  if(document.activeElement===$('#q')){if(e.key==='Escape'){$('#q').blur()}return}
+  if(e.key==='Escape'){$('#ql').classList.remove('on');return}
+  if(e.key===' '){e.preventDefault();$('#ql').classList.contains('on')?$('#ql').classList.remove('on'):ql();return}
+  if(e.key==='f'&&e.ctrlKey){e.preventDefault();$('#q').focus();return}
+  const L=draw.L;if(!L.length)return;let i=L.findIndex(x=>x.f.id===sel);
+  if(['ArrowRight','ArrowDown'].includes(e.key)){e.preventDefault();sel=L[Math.min(L.length-1,i+1)].f.id;draw();if($('#ql').classList.contains('on'))ql()}
+  if(['ArrowLeft','ArrowUp'].includes(e.key)){e.preventDefault();sel=L[Math.max(0,i-1)].f.id;draw();if($('#ql').classList.contains('on'))ql()}
+});
+draw();
+</script>
+</body>
+</html>

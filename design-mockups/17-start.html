@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree · Start</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="data.js"></script>
+<script src="kit.js"></script>
+<style>
+/* Start: the Windows Start menu. A search box, a grid of pinned things, a "Recommended" list, a footer.
+   Pinned = your folders. Recommended = what needs a look. Searching turns it into a list you open in place. */
+:root{--ink:#1d2433;--mute:#5f6b83;--glass:#f4f7ffd9;--line:#1d243322;--acc:#2a7de1;--pii:#c2255c}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font:14px/1.4 "Segoe UI Variable Text","Segoe UI",Figtree,system-ui,sans-serif;color:var(--ink);overflow:hidden;
+ background:radial-gradient(60% 70% at 18% 20%,#7fd8e6 0,#7fd8e600 70%),radial-gradient(55% 65% at 85% 25%,#b79cf2 0,#b79cf200 70%),radial-gradient(60% 60% at 60% 95%,#f7b7d3 0,#f7b7d300 70%),#dfe8f7}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.petal{position:fixed;border-radius:50% 0 50% 0;filter:blur(2px);opacity:.55}
+.menu{position:fixed;left:50%;bottom:62px;transform:translateX(-50%);width:704px;height:min(740px,calc(100vh - 84px));background:var(--glass);backdrop-filter:blur(40px) saturate(1.6);border-radius:14px;border:1px solid #fff9;box-shadow:0 24px 70px #1d243344;display:flex;flex-direction:column;overflow:hidden}
+.sch{margin:26px 32px 0;display:flex;align-items:center;gap:10px;height:42px;background:#ffffffd0;border:1px solid var(--line);border-bottom:2px solid var(--acc);border-radius:22px;padding:0 16px}
+.sch input{flex:1;border:0;outline:0;background:none;font:inherit;font-size:15px;min-width:0}
+.sch .ic{color:var(--mute)}
+.scr{flex:1;overflow:auto;padding:0 32px 10px}
+.hd{display:flex;align-items:center;justify-content:space-between;margin:24px 0 12px}
+.hd h2{font-size:15px;font-weight:600}
+.hd button{display:flex;align-items:center;gap:4px;background:#ffffff99;border:1px solid var(--line);border-radius:5px;padding:3px 10px;font-size:12.5px}
+.hd button:hover{background:#fff}
+.pin{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.pn{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 4px 10px;border-radius:6px;text-align:center;font-size:12.5px;line-height:1.25;min-height:104px}
+.pn:hover{background:#ffffffb5}
+.pn:focus-visible,.rec:focus-visible,.rw:focus-visible,.bk:focus-visible,.fb:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.pn i{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:#fff;box-shadow:0 3px 8px #1d24332e;font-style:normal;position:relative}
+.pn small{color:var(--mute);font-size:11.5px}
+.rec{display:grid;grid-template-columns:1fr 1fr;gap:2px 10px}
+.rc{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:6px;text-align:left;min-width:0}
+.rc:hover{background:#ffffffb5}
+.rc .t{min-width:0}.rc b{display:block;font-weight:400;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc small{display:block;color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ft{height:70px;background:#e7edfbd8;border-top:1px solid var(--line);display:flex;align-items:center;padding:0 28px;gap:14px}
+.who{display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:8px}
+.who i{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#7fd8e6,#b79cf2);display:grid;place-items:center;color:#fff}
+.who b{font-weight:500;font-size:13px;display:block}.who small{font-size:11.5px;color:var(--mute);display:block}
+.ft .r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.seg{display:inline-flex;background:#ffffffa0;border:1px solid var(--line);border-radius:18px;padding:2px}
+.seg button{padding:5px 12px;border-radius:15px;font-size:12.5px}
+.seg button[aria-pressed=true]{background:var(--acc);color:#fff}
+.fb{height:36px;padding:0 14px;border-radius:18px;background:#ffffffa0;border:1px solid var(--line);display:flex;align-items:center;gap:8px;font-size:13px}.fb:hover{background:#fff}
+/* results */
+.bk{display:flex;align-items:center;gap:8px;margin:20px 0 4px;padding:4px 8px 4px 2px;border-radius:6px;font-size:13px}
+.bk:hover{background:#ffffffb5}
+.tabs{display:flex;gap:6px;margin:16px 0 4px}
+.tabs button{padding:5px 14px;border-radius:15px;font-size:13px;background:#ffffff80}
+.tabs button[aria-pressed=true]{background:var(--acc);color:#fff}
+.lbl{font-size:13px;font-weight:600;margin:16px 0 8px;display:flex;justify-content:space-between}
+.lbl span{font-weight:400;color:var(--mute);font-size:12.5px}
+.rw{display:grid;grid-template-columns:36px 1fr auto;gap:12px;align-items:center;width:100%;padding:8px 10px;border-radius:8px;text-align:left}
+.rw:hover{background:#ffffffb5}
+.rw[aria-expanded=true]{background:#fff;border-radius:8px 8px 0 0}
+.rw .ico{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;color:#fff}
+.rw b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rw small{display:block;color:var(--mute);font-size:12px}
+.rw .pc{font-size:12.5px;color:var(--mute);font-variant-numeric:tabular-nums}
+.chip{font-size:11px;font-weight:600;padding:1px 7px;border-radius:9px;margin-left:6px;vertical-align:1px}
+.chip.p{background:#fbd5e3;color:#a3174a}.chip.g{background:#fde7b6;color:#855300}
+.dtl{background:#fff;border-radius:0 0 8px 8px;padding:6px 18px 16px 58px;margin-bottom:6px}
+.dtl p{font-size:13.5px;line-height:1.5;margin:6px 0 10px}
+.page{background:#f2f5fb;border-radius:8px;padding:12px 14px;font:12.5px/1.65 Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;word-break:break-word}
+mark.pii{padding:0 3px;border-radius:3px}mark.pii.r{background:#1d2433;color:#fff}mark.pii.o{background:#fbd5e3;color:#a3174a}
+b.hit{background:#ffe58a;font-weight:inherit}
+.dtl .acts{display:flex;gap:8px;margin-top:12px}
+.dtl .acts button{height:32px;padding:0 14px;border-radius:6px;border:1px solid var(--line);font-size:13px;background:#fff}
+.dtl .acts button:first-child{background:var(--acc);border-color:var(--acc);color:#fff}
+.empty{padding:70px 20px;text-align:center;color:var(--mute)}
+/* taskbar */
+.task{position:fixed;left:0;right:0;bottom:0;height:52px;background:#e8eefaaa;backdrop-filter:blur(30px);border-top:1px solid #fff8;display:flex;align-items:center;justify-content:center;gap:6px}
+.task i{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:var(--ink)}
+.task i.on{background:#fff9;box-shadow:inset 0 -3px 0 var(--acc)}
+.task .clk{position:absolute;right:16px;font-size:12px;text-align:right;line-height:1.3}
+#toast{background:#1d2433}
+@media (max-width:760px){.menu{width:96vw}.pin{grid-template-columns:repeat(3,1fr)}.rec{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="menu" role="dialog" aria-label="ShadowTree">
+  <label class="sch"><span id="si"></span><input id="q" placeholder="Search your files" aria-label="Search your files" autocomplete="off"></label>
+  <div class="scr" id="scr"></div>
+  <div class="ft">
+    <div class="who"><i id="wi"></i><div><b>sample_messy_folder</b><small id="ws">13 files · read-only</small></div></div>
+    <div class="r"><div class="seg" role="group" aria-label="Text view"><button id="vr" aria-pressed="true">Redacted</button><button id="vo" aria-pressed="false">Original</button></div><button class="fb" id="idx"></button></div>
+  </div>
+</div>
+<div class="task" aria-hidden="true"><i class="on" id="t1"></i><i id="t2"></i><i id="t3"></i><i id="t4"></i><span class="clk">9:41<br>25/11/2026</span></div>
+<script>
+const {S,$,$$,icon,esc,FCOL}=KIT;
+let view='home',q='',red=true,openId=null,kind='all';
+$('#si').innerHTML=icon('search',17);$('#wi').innerHTML=icon('disk',17);$('#idx').innerHTML=icon('refresh',15)+'Index (Read-Only)';
+['tree','folder','search','gear'].forEach((n,i)=>$('#t'+(i+1)).innerHTML=icon(n,18));
+const NM={all:'All files',pii:'Sensitive',guess:'Needs a look'};
+const col=f=>FCOL[S.primary(f).id];
+function pinned(){
+  const P=S.folders.map(f=>({id:f.id,n:f.short==='Finance'?'Finance & Receipts':f.name,c:FCOL[f.id],ic:'folder',k:S.inFolder(f.id).length}));
+  P.push({id:'pii',n:'Sensitive',c:FCOL.pii,ic:'shield',k:S.sensitive().length});
+  return P.map(p=>`<button class="pn" data-v="${p.id}"><i style="background:${p.c}">${icon(p.ic,24)}</i>${esc(p.n)}<small>${p.k} files</small></button>`).join('');
+}
+function home(){
+  const need=S.files.filter(S.isGuess),pii=S.sensitive().filter(f=>!S.isGuess(f));
+  const rec=[...need,...pii].slice(0,6);
+  return `<div class="hd"><h2>Pinned</h2><button data-v="all">All files${icon('chevR',12)}</button></div><div class="pin">${pinned()}</div>
+  <div class="hd"><h2>Recommended</h2><button data-v="guess">Needs a look${icon('chevR',12)}</button></div>
+  <div class="rec">${rec.map(f=>`<button class="rc" data-o="${f.id}"><span class="ico" style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:#fff;background:${col(f)};flex:none">${icon(KIT.kindIcon(f),18)}</span><span class="t"><b>${esc(f.name)}</b><small>${S.isGuess(f)?'Best guess · '+S.pct(S.score(f))+'% sure':'Personal data found'}</small></span></button>`).join('')}</div>`;
+}
+function rowHTML(f,m){
+  const o=openId===f.id,fo=S.primary(f);
+  return `<button class="rw" data-r="${f.id}" aria-expanded="${o}"><span class="ico" style="background:${col(f)}">${icon(KIT.kindIcon(f),19)}</span><span><b>${q?KIT.hl(f.name,q):esc(f.name)}${KIT.pii(f)?'<span class="chip p">Personal data</span>':''}${S.isGuess(f)?'<span class="chip g">Best guess</span>':''}</b><small>${esc(fo.name)} · ${S.size(f.bytes)}</small></span><span class="pc">${m!=null?m+'%':S.pct(S.score(f))+'%'}</span></button>`+
+   (o?`<div class="dtl"><p>${esc(f.summary)}</p><div class="page">${KIT.body(f,red,q)}</div><div class="acts"><button data-rv>Reveal on Disk</button><button data-cp>Copy path</button></div></div>`:'');
+}
+function list(L,title,sub){
+  const KS=[['all','All'],['doc','Documents'],['image','Images'],['audio','Audio']];
+  const ok=f=>kind==='all'||(kind==='doc'&&['pdf','text'].includes(f.kind))||f.kind===kind;
+  L=L.filter(r=>ok(r.f));
+  return `<div class="tabs">${KS.map(([k,t])=>`<button data-k="${k}" aria-pressed="${kind===k}">${t}</button>`).join('')}</div><div class="lbl">${title}<span>${sub||L.length+' files'}</span></div>`+(L.length?L.map(r=>rowHTML(r.f,r.m)).join(''):'<div class="empty">Nothing here.</div>');
+}
+function draw(){
+  let h;
+  if(q.trim()){const r=KIT.run(q);const L=r.hits.map(x=>({f:x.f,m:x.match}));
+    h=list(L,'Best match first',r.weak?`${r.weak} weak match${r.weak>1?'es':''} hidden`:'')}
+  else if(view==='home')h=home();
+  else{const L=(view==='all'?S.files:view==='pii'?S.sensitive():view==='guess'?S.files.filter(S.isGuess):S.inFolder(view)).map(f=>({f,m:S.fById[view]?Math.round(f.links.find(l=>l[0]===view)[1]*100):null}));
+    h=`<button class="bk" data-v="home">${icon('chevL',16)}Back to Start</button>`+list(L,S.fById[view]?S.fById[view].name:NM[view])}
+  $('#scr').innerHTML=h;
+  $$('#scr [data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;openId=null;kind='all';draw();$('#scr').scrollTop=0});
+  $$('#scr [data-o]').forEach(b=>b.onclick=()=>{view=S.isGuess(S.byId[b.dataset.o])?'guess':'pii';openId=+b.dataset.o;kind='all';draw()});
+  $$('#scr [data-r]').forEach(b=>b.onclick=()=>{openId=openId===+b.dataset.r?null:+b.dataset.r;draw()});
+  $$('#scr [data-k]').forEach(b=>b.onclick=()=>{kind=b.dataset.k;draw()});
+  const rv=$('[data-rv]');if(rv){rv.onclick=()=>KIT.toast('Revealed in Windows Explorer');$('[data-cp]').onclick=()=>KIT.toast('Path copied')}
+}
+function setRed(v){red=v;$('#vr').setAttribute('aria-pressed',v);$('#vo').setAttribute('aria-pressed',!v);draw()}
+$('#vr').onclick=()=>setRed(true);$('#vo').onclick=()=>setRed(false);
+$('#q').oninput=e=>{q=e.target.value;openId=null;draw()};
+$('#idx').onclick=()=>{$('#idx').disabled=true;$('#ws').textContent='Indexing…';KIT.scan(v=>$('#ws').textContent='Indexing '+Math.round(v*13)+' of 13…',()=>{$('#ws').textContent='13 files · read-only';$('#idx').disabled=false;KIT.toast('Nothing was changed on your disk.')})};
+addEventListener('keydown',e=>{
+  if(e.key==='Escape'){if(q){q='';$('#q').value='';draw()}else if(openId){openId=null;draw()}else if(view!=='home'){view='home';draw()}}
+  else if(e.key.length===1&&!e.ctrlKey&&!e.metaKey&&document.activeElement!==$('#q')){$('#q').focus()}
+});
+draw();$('#q').focus();
+</script>
+</body>
+</html>

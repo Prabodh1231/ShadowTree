@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree · 20 directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#17181b;--card:#222428;--ink:#f1f1ee;--mute:#9a9ca3;--line:#34373d}
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--ink);font:16px/1.45 "Hanken Grotesk",sans-serif;padding:48px clamp(18px,4vw,56px) 80px}
+  h1{font:700 clamp(28px,4vw,46px)/1.05 "Hanken Grotesk";letter-spacing:-.03em;max-width:20ch}
+  header p{color:var(--mute);max-width:62ch;margin-top:12px}
+  nav{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+  nav a{color:var(--ink);border:1px solid var(--line);border-radius:20px;padding:6px 16px;font-size:14px;text-decoration:none}
+  nav a:hover{border-color:#7b7f89}
+  nav a:focus-visible{outline:3px solid #fff;outline-offset:3px}
+  section{margin-top:56px}
+  h2{font:700 24px "Hanken Grotesk";letter-spacing:-.02em}
+  section>p{color:var(--mute);max-width:70ch;margin-top:6px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,440px),1fr));gap:26px;margin-top:26px}
+  a.card{display:block;color:inherit;text-decoration:none;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;transition:transform .15s,border-color .15s}
+  a.card:hover{transform:translateY(-3px);border-color:#7b7f89}
+  a.card:focus-visible{outline:3px solid #fff;outline-offset:3px}
+  .thumb{position:relative;aspect-ratio:16/10;overflow:hidden;background:#000;border-bottom:1px solid var(--line)}
+  .thumb iframe{position:absolute;left:0;top:0;width:1440px;height:900px;border:0;transform-origin:0 0;pointer-events:none}
+  .info{padding:16px 18px 20px}
+  .info h3{font:700 19px "Hanken Grotesk";letter-spacing:-.01em;display:flex;gap:10px;align-items:baseline}
+  .info h3 span{color:var(--mute);font-weight:500;font-size:14px;font-variant-numeric:tabular-nums}
+  .info p{color:#c4c6cc;font-size:14.5px;margin-top:6px;max-width:48ch}
+  .info .like{display:inline-block;margin-top:10px;font-size:12.5px;color:#d9dbe0;background:#33363d;border-radius:12px;padding:2px 10px}
+  .info small{display:block;margin-top:10px;color:var(--mute);font-size:13px}
+  @media (prefers-reduced-motion:reduce){a.card{transition:none}}
+</style>
+</head>
+<body>
+<header><h1>ShadowTree, twenty ways to see it</h1><p>Every direction is a working mockup on the same sample folder: search, redaction, best guesses, reveal on disk. Set one is bold and new. Set two reuses layouts people already know, so nobody has to learn anything.</p>
+<nav><a href="#one">Set one: new ideas</a><a href="#two">Set two: already familiar</a></nav></header>
+<section id="one"><h2>Set one: new ideas</h2><p>Fresh ways to look at a virtual file system. Each one asks the user to learn something.</p><main class="grid" id="g1"></main></section>
+<section id="two"><h2>Set two: already familiar</h2><p>Each one copies a layout that millions of people use daily, then gives it ShadowTree's own look. Folders, search, preview and keys behave the way they do there.</p><main class="grid" id="g2"></main></section>
+<script>
+const A=[
+ ['01-overlay','Overlay','A sheet of tracing vellum over your real disk. Pencil strings run from each messy file to where it is filed.','Hover a row. Search dims the rest.'],
+ ['02-commander','Commander','A dual-pane, keyboard-first file manager. F8 Delete is permanently greyed out.','Arrows, Tab, Enter, F3, F4, or just type to search.'],
+ ['03-catalog','Catalogue','Folders are drawers, files are typed index cards, personal data is covered with black tape.','Open a card, lift the tape.'],
+ ['04-mosaic','Mosaic','The whole folder as one picture. A primary-colour treemap: area is size, hatching is personal data.','Switch Area to equal. Click a block.'],
+ ['05-ask','Ask','Search is the product. One huge question on blue, a white sheet of answers rising beneath it.','Try the chips, then open a result to see how it was scored.'],
+ ['06-canopy','Canopy','The name taken literally. Your folder as a tree, and the virtual tree as the shadow it casts.','Drag the light.'],
+ ['07-redacted','Redacted','The document is the hero. Personal data is a black bar until you hold the button.','Hold to reveal, click an entity type.'],
+ ['08-sortdesk','Sort desk','Only asks about the files the AI is unsure of. One card, number keys, five bins.','Press 1 to 5, Enter, Z to undo.'],
+ ['09-columns','Columns','Miller columns for big folders: folder, file, why it is here, evidence. Arrow keys all the way.','Arrows, / to search, R to toggle redaction, Index to run a scan.'],
+ ['10-tape','Tape','Trust as a thermal receipt. The last lines say files moved: 0, bytes written: 0.','Open a line. Press Print again.']
+];
+const B=[
+ ['11-explorer','Explorer','The Windows File Explorer layout: folder pane, address bar, details list, preview pane, right-click menu. Delete is there, greyed out.','Windows File Explorer','Arrows, Ctrl+F, F5. Right-click a file.'],
+ ['12-inbox','Inbox','Folders are labels, files are messages, and a file the AI is not sure about is unread. The original is the attachment.','Gmail, Outlook','Open the unread file and press Move to. J and K move.'],
+ ['13-drive','Drive','Suggested files first, folders as chips, files as cards with a thumbnail. Switch between grid and list.','Google Drive, OneDrive','Click a card for details. Try the list toggle.'],
+ ['14-spotlight','Spotlight','A search box floating over your desktop. Top hit, folders, files, preview on the right.','Spotlight, PowerToys Run','Type invoice. Tab flips redaction. Enter on a folder scopes the search.'],
+ ['15-results','Results','A search results page: blue links, a green path, a snippet with your words in bold, a panel on the right.','Web search','Try a chip, open the Personal data tab, show weak matches.'],
+ ['16-studio','Studio','A code editor layout. Personal data shows up as warnings in a Problems panel, like lint errors.','VS Code','Open several files. Ctrl+P to search, Ctrl+W to close a tab.'],
+ ['17-start','Start','Pinned folders, a Recommended list of files that need a look, and search that opens results in place.','Windows Start menu','Just start typing. Esc steps back.'],
+ ['18-sheet','Sheet','One row per file, one column per fact. Folders are the sheet tabs along the bottom. The formula bar shows the whole cell.','Excel, Google Sheets','Use the arrow on Folder to filter. Arrow keys move the cell.'],
+ ['19-storage','Storage','The Storage page from system settings: one bar of what is using space, categories, recommendations, switches.','Windows Settings','Open a recommendation. Flip Hide personal data.'],
+ ['20-gallery','Gallery','The gallery view of a file manager: a big preview, a filmstrip, an info pane. Space for a full-size look.','Finder, gallery view','Left and right walk the strip. Space opens it large.']
+];
+function mk(el,D,start,like){
+  D.forEach((d,i)=>{const [f,t,p]=d,h=like?d[4]:d[3],lk=like?d[3]:null;
+    const a=document.createElement('a');a.className='card';a.href=f+'.html';
+    a.innerHTML=`<div class="thumb"><iframe src="${f}.html" title="${t} preview" loading="lazy" tabindex="-1"></iframe></div><div class="info"><h3>${t}<span>${String(start+i).padStart(2,'0')}</span></h3><p>${p}</p>${lk?`<span class="like">Works like ${lk}</span>`:''}<small>${h}</small></div>`;
+    el.appendChild(a)});
+}
+mk(document.getElementById('g1'),A,1,false);mk(document.getElementById('g2'),B,11,true);
+function fit(){document.querySelectorAll('.thumb').forEach(t=>{t.querySelector('iframe').style.transform='scale('+(t.clientWidth/1440)+')'})}
+addEventListener('resize',fit);fit();document.querySelectorAll('.grid').forEach(g=>new ResizeObserver(fit).observe(g));
+</script>
+</body>
+</html>

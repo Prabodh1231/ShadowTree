@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree · Storage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
+<script src="data.js"></script>
+<script src="kit.js"></script>
+<style>
+/* Storage: the Settings > Storage page. One big bar of what is using space, a list of categories, a few
+   cleanup recommendations, switches for options. Here the categories are your virtual folders. */
+:root{--bg:#f1f3f6;--card:#fff;--ink:#1c2230;--mute:#5d6678;--line:#e1e5ec;--acc:#0f6cbd;--pii:#c2255c}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font:14px/1.4 "Nunito Sans","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.app{display:grid;grid-template-columns:300px 1fr;height:100vh}
+.nav{padding:18px 14px;overflow:auto}
+.me{display:flex;align-items:center;gap:14px;padding:6px 10px 18px}
+.me i{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#0f6cbd,#6cc4a1);display:grid;place-items:center;color:#fff}
+.me b{display:block;font-size:15px;font-weight:700}.me small{color:var(--mute);font-size:12.5px}
+.nsr{display:flex;align-items:center;gap:8px;height:36px;background:#fff;border:1px solid var(--line);border-bottom-color:#8a94a8;border-radius:5px;padding:0 10px;margin:0 4px 14px}
+.nsr:focus-within{border-bottom:2px solid var(--acc)}
+.nsr input{flex:1;border:0;outline:0;background:none;font:inherit;min-width:0}.nsr .ic{color:var(--mute)}
+.ni{display:flex;align-items:center;gap:14px;width:100%;height:40px;padding:0 12px;border-radius:6px;text-align:left;position:relative}
+.ni:hover{background:#0000000a}
+.ni[aria-current=true]{background:#e4ebf5}
+.ni[aria-current=true]::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:2px;background:var(--acc)}
+.ni .ic{color:var(--acc)}.ni .n{margin-left:auto;color:var(--mute);font-size:12.5px}
+.ni:focus-visible,.cat:focus-visible,.rec:focus-visible,.fr:focus-visible,.bt:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.main{overflow:auto;padding:22px 44px 60px}
+.crumb{display:flex;align-items:center;gap:8px;font:600 26px "Nunito Sans";letter-spacing:-.01em;margin-bottom:22px;flex-wrap:wrap}
+.crumb button{color:var(--mute);font-weight:600}.crumb button:hover{color:var(--ink)}
+.crumb .ic{color:var(--mute)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px}
+.hero{padding:22px 24px;margin-bottom:26px}
+.hero .t{display:flex;align-items:center;gap:18px;margin-bottom:18px}
+.hero .t .ic{color:var(--acc)}
+.hero b{font:800 28px "Nunito Sans";display:block;letter-spacing:-.02em}
+.hero small{color:var(--mute);font-size:13.5px}
+.stack{display:flex;height:16px;border-radius:8px;overflow:hidden;gap:2px;background:#e8ecf2}
+.stack i{display:block;height:100%;transition:filter .12s}.stack i:hover{filter:brightness(1.15)}
+.leg{display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:var(--mute)}
+.leg span{display:flex;align-items:center;gap:7px}.leg i{width:10px;height:10px;border-radius:3px}
+h2{font:700 16px "Nunito Sans";margin:26px 0 10px}
+.cat{display:grid;grid-template-columns:44px 1fr 90px 110px 20px;gap:14px;align-items:center;width:100%;padding:12px 18px;text-align:left;border-top:1px solid var(--line)}
+.cat:first-child{border-top:0}
+.cat:hover{background:#f6f8fb}
+.cat .tile{width:40px;height:40px;border-radius:9px;display:grid;place-items:center;color:#fff}
+.cat b{display:block;font-weight:600}.cat small{color:var(--mute);font-size:12.5px}
+.cat .sz{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.cat .bar{height:6px;border-radius:3px;background:#e8ecf2;overflow:hidden}.cat .bar i{display:block;height:100%;border-radius:3px}
+.cat .ic{color:var(--mute)}
+.rec{display:grid;grid-template-columns:44px 1fr auto 20px;gap:14px;align-items:center;width:100%;padding:14px 18px;text-align:left;border-top:1px solid var(--line)}
+.rec:first-child{border-top:0}.rec:hover{background:#f6f8fb}
+.rec .tile{width:40px;height:40px;border-radius:9px;display:grid;place-items:center;background:#e4ebf5;color:var(--acc)}
+.rec b{display:block;font-weight:600}.rec small{color:var(--mute);font-size:12.5px}
+.rec .ic.c{color:var(--mute);transition:transform .15s}.rec[aria-expanded=true] .ic.c{transform:rotate(90deg)}
+.pill{font-size:12px;font-weight:700;padding:2px 10px;border-radius:11px;background:#e4ebf5;color:var(--acc)}
+.sub{background:#fafbfd;border-top:1px solid var(--line);padding:4px 0}
+.fr{display:grid;grid-template-columns:34px 1fr 70px 90px;gap:12px;align-items:center;width:100%;padding:9px 18px 9px 76px;text-align:left}
+.fr:hover{background:#eef2f8}
+.fr .ic{color:var(--mute)}.fr b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fr small{display:block;color:var(--mute);font-size:12px}
+.fr .sz{text-align:right;color:var(--mute);font-variant-numeric:tabular-nums}
+.flat .fr{padding-left:18px;border-top:1px solid var(--line)}.flat .fr:first-child{border-top:0}
+.set{display:flex;align-items:center;gap:16px;padding:16px 20px;border-top:1px solid var(--line)}
+.set:first-child{border-top:0}
+.set .x{flex:1}.set b{display:block;font-weight:600}.set small{color:var(--mute);font-size:12.5px}
+.sw{width:42px;height:22px;border-radius:11px;border:1px solid #6c7589;background:#f1f3f6;position:relative;flex:none;transition:.15s}
+.sw::after{content:"";position:absolute;left:4px;top:4px;width:12px;height:12px;border-radius:50%;background:#6c7589;transition:.15s}
+.sw[aria-checked=true]{background:var(--acc);border-color:var(--acc)}.sw[aria-checked=true]::after{left:23px;background:#fff;width:14px;height:14px;top:3px}
+.sw:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.bt{height:34px;padding:0 16px;border-radius:5px;border:1px solid #c6ccd8;background:#fff;font-weight:600;font-size:13px}.bt:hover{background:#f3f5f9}
+.bt.p{background:var(--acc);border-color:var(--acc);color:#fff}.bt.p:hover{background:#0c5a9e}
+.page{background:#f6f8fb;border:1px solid var(--line);border-radius:6px;padding:14px 16px;font:13px/1.7 Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;word-break:break-word;margin:0 20px 18px}
+mark.pii{padding:0 3px;border-radius:3px}mark.pii.r{background:#1c2230;color:#fff}mark.pii.o{background:#fbd5e3;color:#a3174a}
+b.hit{background:#ffe58a;font-weight:inherit}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:6px 14px;padding:4px 20px 16px;font-size:13.5px}.kv dt{color:var(--mute)}.kv dd{margin:0;overflow-wrap:anywhere}
+.chip{font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:9px;margin-left:8px;vertical-align:1px}.chip.p{background:#fbd5e3;color:#a3174a}.chip.g{background:#fde7b6;color:#855300}
+.empty{padding:50px;text-align:center;color:var(--mute)}
+.ph{padding:16px 20px 6px;font-weight:700}
+#toast{background:#1c2230}
+@media (max-width:980px){.app{grid-template-columns:1fr}.nav{display:none}.main{padding:20px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="nav" aria-label="Sections">
+    <div class="me"><i id="mi"></i><div><b>sample_messy_folder</b><small>Read-only view</small></div></div>
+    <label class="nsr"><span id="si"></span><input id="q" placeholder="Find a file" aria-label="Find a file" autocomplete="off"></label>
+    <div id="ni"></div>
+  </nav>
+  <main class="main" id="main"></main>
+</div>
+<script>
+const {S,$,$$,icon,esc,FCOL}=KIT;
+const total=S.files.reduce((a,f)=>a+f.bytes,0);
+const fsize=id=>S.files.filter(f=>S.primary(f).id===id).reduce((a,f)=>a+f.bytes,0);
+let route=['home'],q='',hide=true,weak=false,open=null,idxBusy=false;
+$('#mi').innerHTML=icon('disk',26);$('#si').innerHTML=icon('search',15);
+const NAV=[['home','Storage','disk'],['pii','Sensitive data','shield'],['guess','Needs a look','help'],['index','Index','refresh']];
+const go=(...r)=>{route=r;q='';$('#q').value='';open=null;draw();$('#main').scrollTop=0};
+const FILES={pii:()=>S.sensitive(),guess:()=>S.files.filter(S.isGuess)};
+function nav(){
+  const cur=q?'':route[0];
+  $('#ni').innerHTML=NAV.map(([id,t,ic])=>`<button class="ni" data-n="${id}" aria-current="${cur===id||(id==='home'&&cur==='folder')}">${icon(ic,19)}${t}<span class="n">${id==='pii'?S.sensitive().length:id==='guess'?S.files.filter(S.isGuess).length:''}</span></button>`).join('');
+  $$('#ni [data-n]').forEach(b=>b.onclick=()=>go(b.dataset.n));
+}
+const crumb=(parts)=>`<div class="crumb">${parts.map((p,i)=>i<parts.length-1?`<button data-c="${i}">${esc(p)}</button>${icon('chevR',18)}`:`<span>${esc(p)}</span>`).join('')}</div>`;
+const flags=f=>(KIT.pii(f)?'<span class="chip p">Personal data</span>':'')+(S.isGuess(f)?'<span class="chip g">Best guess</span>':'');
+const frow=(f,m)=>`<button class="fr" data-f="${f.id}">${icon(KIT.kindIcon(f),20)}<span style="min-width:0"><b>${q?KIT.hl(f.name,q):esc(f.name)}${flags(f)}</b><small>${esc(S.primary(f).name)}${m!=null?' · '+m+'% match':''}</small></span><span class="sz">${S.size(f.bytes)}</span><span class="sz">${icon('chevR',16)}</span></button>`;
+function home(){
+  const need=S.files.filter(S.isGuess),pii=S.sensitive(),basic=S.files.filter(f=>f.ai==='fallback');
+  const R=[['guess','Review best guesses',`${need.length} files are filed with low confidence`,need,'help'],['pii','Check personal data',`${pii.length} files contain names, emails or numbers`,pii,'shield'],['basic','Files with a basic summary',`${basic.length} were summarised without an AI model`,basic,'sparkle']];
+  return `<div class="crumb"><span>Storage</span></div>
+  <section class="card hero"><div class="t">${icon('disk',44)}<div><b>${S.size(total)} in ${S.files.length} files</b><small>Read-only. ShadowTree never moves, renames or deletes these files.</small></div><button class="bt p" id="idx" style="margin-left:auto">Index (Read-Only)</button></div>
+   <div class="stack" role="img" aria-label="Size by folder">${S.folders.map(f=>`<i style="width:${fsize(f.id)/total*100}%;background:${FCOL[f.id]}" title="${esc(f.name)}"></i>`).join('')}</div>
+   <div class="leg">${S.folders.map(f=>`<span><i style="background:${FCOL[f.id]}"></i>${esc(f.short)} ${S.size(fsize(f.id))}</span>`).join('')}</div></section>
+  <h2>Folders</h2><section class="card">${S.folders.map(f=>`<button class="cat" data-fo="${f.id}"><span class="tile" style="background:${FCOL[f.id]}">${icon('folder',22)}</span><span><b>${esc(f.name)}</b><small>${S.inFolder(f.id).length} files · ${esc(f.blurb)}</small></span><span class="bar"><i style="width:${fsize(f.id)/Math.max(...S.folders.map(x=>fsize(x.id)))*100}%;background:${FCOL[f.id]}"></i></span><span class="sz">${S.size(fsize(f.id))}</span>${icon('chevR',16)}</button>`).join('')}</section>
+  <button class="bt" id="nf" style="margin-top:12px">New folder</button>
+  <h2>Recommendations</h2><section class="card">${R.map(([id,t,s,L,ic])=>`<button class="rec" data-rec="${id}" aria-expanded="${open===id}"><span class="tile">${icon(ic,22)}</span><span><b>${t}</b><small>${s}</small></span><span class="pill">${L.length}</span>${icon('chevR',16,'c')}</button>${open===id?`<div class="sub">${L.map(f=>frow(f)).join('')}</div>`:''}`).join('')}</section>
+  <h2>Options</h2><section class="card"><div class="set"><div class="x"><b>Hide personal data in previews</b><small>Names, emails, phone and account numbers appear as [EMAIL_1] and so on.</small></div><span>${hide?'On':'Off'}</span><button class="sw" role="switch" aria-checked="${hide}" id="s1" aria-label="Hide personal data in previews"></button></div>
+   <div class="set"><div class="x"><b>Show weak matches in search</b><small>Matches under 25% are hidden by default.</small></div><span>${weak?'On':'Off'}</span><button class="sw" role="switch" aria-checked="${weak}" id="s2" aria-label="Show weak matches in search"></button></div></section>`;
+}
+function draw(){
+  nav();let h='';const [r,a]=route;
+  if(q.trim()){const res=KIT.run(q);const L=res.hits.map(x=>({f:x.f,m:x.match})).concat(weak?S.search(q).filter(x=>x.match<25).map(x=>({f:x.f,m:x.match})):[]);
+    h=crumb(['Storage','Find a file'])+`<p style="color:var(--mute);margin:-12px 0 14px">${L.length} result${L.length===1?'':'s'} for “${esc(q)}”${res.weak&&!weak?` · ${res.weak} weak match${res.weak>1?'es':''} hidden`:''}</p>`+(L.length?`<section class="card flat">${L.map(x=>frow(x.f,x.m)).join('')}</section>`:'<div class="empty">Nothing matches. Describe what the file is about.</div>')}
+  else if(r==='home')h=home();
+  else if(r==='folder'){const fo=S.fById[a];h=crumb(['Storage',fo.name])+`<section class="card flat">${S.inFolder(a).map(f=>frow(f,Math.round(f.links.find(l=>l[0]===a)[1]*100))).join('')}</section>`}
+  else if(r==='pii'||r==='guess'){h=crumb(['Storage',r==='pii'?'Sensitive data':'Needs a look'])+`<section class="card flat">${FILES[r]().map(f=>frow(f)).join('')}</section>`}
+  else if(r==='file'){const f=S.byId[a],fo=S.primary(f);h=crumb(['Storage',fo.name,f.name].slice(0,3))+`<section class="card"><div class="ph">${esc(f.title)}${flags(f)}</div><p style="padding:2px 20px 14px;color:var(--mute)">${esc(f.summary)}${f.ai==='fallback'?' (basic summary, no AI model)':''}</p>
+   <div class="set" style="border-top:1px solid var(--line)"><div class="x"><b>Hide personal data</b><small>Shows [EMAIL_1] instead of the real value.</small></div><span>${hide?'On':'Off'}</span><button class="sw" role="switch" aria-checked="${hide}" id="s1" aria-label="Hide personal data"></button></div>
+   <div style="height:12px"></div><div class="page">${KIT.body(f,hide,q)}</div></section>
+   <h2>Details</h2><section class="card"><dl class="kv" style="padding-top:16px"><dt>Filed in</dt><dd>${esc(fo.name)}</dd><dt>Match</dt><dd>${S.pct(S.score(f))}%${S.isGuess(f)?' · best guess':''}</dd>${f.links.length>1?`<dt>Also near</dt><dd>${f.links.slice(1).map(l=>esc(S.fById[l[0]].name)+' '+S.pct(l[1])+'%').join(', ')}</dd>`:''}<dt>Type</dt><dd>${S.KIND[f.kind]} · ${S.size(f.bytes)}</dd><dt>On disk</dt><dd>${esc(S.path(f))}</dd><dt>Tags</dt><dd>${esc(f.tags.join(', '))}</dd></dl>
+   <div style="display:flex;gap:10px;padding:0 20px 18px"><button class="bt p" id="rv">Reveal on Disk</button><button class="bt" id="cp">Copy path</button></div></section>`}
+  else if(r==='index'){h=crumb(['Storage','Index'])+`<section class="card"><div class="set"><div class="x"><b>Index (Read-Only)</b><small>Reads your files to summarise and sort them. Nothing is changed on disk.</small></div><button class="bt p" id="idx">Index now</button></div><div class="set"><div class="x"><b>Folder</b><small>${esc(S.ROOT)}</small></div><button class="bt" id="pk">Choose folder</button></div><div class="set"><div class="x"><b>AI models</b><small>Ready. Two files used the basic summary because no model was needed.</small></div></div></section>`}
+  $('#main').innerHTML=h;
+  $$('#main [data-c]').forEach(b=>b.onclick=()=>{const i=+b.dataset.c;if(i===0||route[0]!=='file')go('home');else go('folder',S.primary(S.byId[route[1]]).id)});
+  $$('#main [data-fo]').forEach(b=>b.onclick=()=>go('folder',b.dataset.fo));
+  $$('#main [data-rec]').forEach(b=>b.onclick=()=>{open=open===b.dataset.rec?null:b.dataset.rec;draw()});
+  $$('#main [data-f]').forEach(b=>b.onclick=()=>{const prev=q?['home']:route;q='';$('#q').value='';route=['file',b.dataset.f];route.back=prev;draw();$('#main').scrollTop=0});
+  const s1=$('#s1');if(s1)s1.onclick=()=>{hide=!hide;draw()};const s2=$('#s2');if(s2)s2.onclick=()=>{weak=!weak;draw()};
+  $$('#main #idx').forEach(b=>b.onclick=()=>{b.disabled=true;KIT.scan(v=>b.textContent='Indexing '+Math.round(v*100)+'%',()=>{b.textContent=b.id==='idx'?'Index (Read-Only)':'Index now';b.disabled=false;KIT.toast('Indexed 13 files. Nothing was changed.')})});
+  const nf=$('#nf');if(nf)nf.onclick=()=>KIT.toast('Created “New folder”. Sorting your files into it…');
+  const pk=$('#pk');if(pk)pk.onclick=()=>KIT.toast('Pick a folder in the window…');
+  const rv=$('#rv');if(rv){rv.onclick=()=>KIT.toast('Revealed in Windows Explorer');$('#cp').onclick=()=>KIT.toast('Path copied')}
+}
+$('#q').oninput=e=>{q=e.target.value;draw()};
+addEventListener('keydown',e=>{if(e.key==='Escape'){if(q){q='';$('#q').value=''}else if(route[0]==='file'){route=route.back&&route.back[0]!=='file'?route.back:['home']}else route=['home'];draw()}if(e.key==='/'&&document.activeElement!==$('#q')){e.preventDefault();$('#q').focus()}});
+draw();
+</script>
+</body>
+</html>

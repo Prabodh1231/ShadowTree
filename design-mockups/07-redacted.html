@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree 07 · Redacted</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Archivo+Narrow:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* Concept: privacy is the feature, so the document is the hero. Every file opens as a
+     redacted page. Personal data is a black bar until you hold the button to reveal it. */
+  :root{--desk:#363b43;--rail:#22262c;--paper:#fdfdfb;--ink:#17181c;--mute:#6b6f78;--stamp:#b8211a;--line:#d9dadf;--em:#b4531a;--nm:#1f6fb2;--ph:#2e8b57;--ac:#8a3fa0}
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{font:15px/1.4 "Archivo Narrow",sans-serif;background:var(--desk);color:#e6e8ec;display:grid;grid-template-columns:310px 1fr 300px;grid-template-rows:auto 1fr;overflow:hidden}
+  .banner{grid-column:1/-1;background:var(--stamp);color:#fff;text-align:center;font:700 13px "Archivo Narrow";letter-spacing:.2em;text-transform:uppercase;padding:4px}
+  .rail{background:var(--rail);display:flex;flex-direction:column;min-height:0;border-right:1px solid #000}
+  .rail .top{padding:18px 18px 12px}
+  .brand{font:700 22px "Archivo Narrow";letter-spacing:.02em;color:#fff}
+  .rail input{width:100%;margin-top:12px;background:#2d323a;border:1px solid #444b55;color:#fff;font:500 15px "Archivo Narrow";padding:8px 10px;border-radius:2px}
+  .rail input:focus{outline:2px solid #fff;outline-offset:1px}
+  .tabs{display:flex;gap:0;margin-top:12px}
+  .tabs button{all:unset;flex:1;text-align:center;cursor:pointer;padding:6px 0;border:1px solid #444b55;font:700 13px "Archivo Narrow"}
+  .tabs button+button{border-left:0}
+  .tabs button[aria-pressed=true]{background:#fff;color:#000}
+  .tabs button:focus-visible{outline:2px solid #fff;outline-offset:-3px}
+  .files{overflow:auto;flex:1;padding:6px 0 16px}
+  .f{all:unset;box-sizing:border-box;display:block;width:100%;cursor:pointer;padding:11px 18px;border-top:1px solid #2f343c}
+  .f:hover{background:#2a2f37}
+  .f[aria-current=true]{background:#e6e8ec;color:#000}
+  .f:focus-visible{outline:2px solid #fff;outline-offset:-3px}
+  .f b{display:block;font:700 16px "Archivo Narrow"}
+  .f span{font-size:13px;color:#98a0ab}
+  .f[aria-current=true] span{color:#555}
+  .f .rs{float:right;border:1.5px solid #ff8a80;color:#ff8a80;padding:0 5px;font:700 11px "Archivo Narrow";letter-spacing:.08em;transform:rotate(-2deg)}
+  .f[aria-current=true] .rs{border-color:var(--stamp);color:var(--stamp)}
+  .desk{overflow:auto;padding:26px 30px 60px;position:relative}
+  .ctl{display:flex;align-items:center;gap:16px;max-width:760px;margin:0 auto 16px}
+  .hold{all:unset;cursor:pointer;background:#fff;color:#000;font:700 15px "Archivo Narrow";padding:10px 20px;border-radius:2px;user-select:none;touch-action:none;box-shadow:0 3px 0 #000}
+  .hold:active,.hold.down{transform:translateY(2px);box-shadow:0 1px 0 #000;background:#ffe27a}
+  .hold:focus-visible{outline:3px solid #ffe27a;outline-offset:3px}
+  .ctl label{display:flex;gap:8px;align-items:center;color:#c8ccd4;cursor:pointer}
+  .ctl .st{margin-left:auto;color:#c8ccd4;font-size:14px}
+  .page{position:relative;max-width:760px;margin:0 auto;background:var(--paper);color:var(--ink);padding:54px 64px 64px;min-height:640px;box-shadow:0 2px 0 #1b1e23,0 24px 40px -16px rgba(0,0,0,.55)}
+  .page .hd{display:flex;justify-content:space-between;font:500 12px "Archivo Narrow";color:var(--mute);letter-spacing:.06em;border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:26px;text-transform:uppercase}
+  .page h1{font:700 34px/1.1 "Source Serif 4",serif;margin-bottom:10px;letter-spacing:-.01em}
+  .page .sum{font:italic 17px/1.55 "Source Serif 4",serif;color:#3a3d46;margin-bottom:26px;max-width:56ch}
+  .doc{font:16.5px/1.85 "Source Serif 4",serif;white-space:pre-wrap;max-width:60ch}
+  .bar{display:inline-block;height:1.05em;background:var(--ink);vertical-align:-.16em;border-radius:1px;cursor:help}
+  .ent{padding:0 2px;border-bottom:3px solid;font-weight:600}
+  .ent sup{font:700 9px "Archivo Narrow";letter-spacing:.06em;margin-left:3px;text-transform:uppercase}
+  .t-GIVEN_NAME,.t-SURNAME{border-color:var(--nm);color:var(--nm)}.t-EMAIL{border-color:var(--em);color:var(--em)}.t-PHONE{border-color:var(--ph);color:var(--ph)}.t-ACCOUNT{border-color:var(--ac);color:var(--ac)}
+  .ent.hl,.bar.hl{outline:3px solid #ffd23c;outline-offset:2px}
+  .stamp{position:absolute;top:92px;right:46px;border:5px double var(--stamp);color:var(--stamp);font:700 38px/1 "Archivo Narrow";letter-spacing:.1em;padding:6px 16px;transform:rotate(9deg);opacity:.82;text-transform:uppercase;pointer-events:none}
+  .stamp.ok{color:#1f5a9c;border-color:#1f5a9c;font-size:30px}
+  .meta{margin-top:40px;border-top:1px solid var(--line);padding-top:14px;font:13px/1.6 "Archivo Narrow";color:var(--mute);display:grid;grid-template-columns:90px 1fr;max-width:60ch}
+  .meta code{font:12px "Cascadia Mono",Consolas,monospace;color:var(--ink);word-break:break-all}
+  .guess{border:1.5px dashed #9a6b12;color:#7a5410;padding:0 8px;margin-left:6px;font-weight:700}
+  .notes{background:#2b3037;border-left:1px solid #000;padding:24px 22px;overflow:auto}
+  .notes h2{font:700 15px "Archivo Narrow";letter-spacing:.14em;text-transform:uppercase;color:#98a0ab;margin-bottom:10px}
+  .en{all:unset;display:flex;width:100%;box-sizing:border-box;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #3a4049;cursor:pointer}
+  .en:focus-visible{outline:2px solid #fff}
+  .en i{width:12px;height:12px;border-radius:2px;flex:none}
+  .en b{font:700 16px "Archivo Narrow"}
+  .en em{margin-left:auto;font-style:normal;color:#c8ccd4;font-variant-numeric:tabular-nums}
+  .en small{display:block;color:#98a0ab;font-size:12px}
+  .none{color:#98a0ab;margin-top:6px}
+  .how{margin-top:26px;color:#98a0ab;font-size:14px;line-height:1.5}
+  .how b{color:#fff}
+  @media (max-width:1000px){body{grid-template-columns:1fr;overflow:auto}.rail{max-height:260px}.notes{display:none}.page{padding:30px 24px}.stamp{font-size:24px;top:70px}}
+</style>
+</head>
+<body>
+<div class="banner">Local copy &nbsp;&middot;&nbsp; personal data is covered on screen &nbsp;&middot;&nbsp; your original file is untouched</div>
+<aside class="rail">
+  <div class="top"><div class="brand">ShadowTree</div><input id="q" type="search" placeholder="Search by meaning" aria-label="Search files">
+    <div class="tabs" role="group" aria-label="Filter"><button id="t0" aria-pressed="true">All files</button><button id="t1" aria-pressed="false">Personal data</button></div></div>
+  <div class="files" id="files"></div>
+</aside>
+<section class="desk">
+  <div class="ctl"><button class="hold" id="hold" type="button">Hold to reveal</button><label><input type="checkbox" id="keep"> Keep revealed</label><span class="st" id="st"></span></div>
+  <article class="page" id="page"></article>
+</section>
+<aside class="notes" id="notes"></aside>
+<script src="data.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const LABEL={GIVEN_NAME:'First name',SURNAME:'Last name',EMAIL:'Email address',PHONE:'Phone number',ACCOUNT:'Account number'};
+const COLOR={GIVEN_NAME:'#1f6fb2',SURNAME:'#1f6fb2',EMAIL:'#b4531a',PHONE:'#2e8b57',ACCOUNT:'#8a3fa0'};
+let cur=ST.files[0],tab=0,q='',held=false,hl=null;
+const revealed=()=>held||$('keep').checked;
+function list(){
+  let l=ST.files;if(tab===1)l=ST.sensitive();
+  if(q.trim()){const ids=new Set(ST.search(q).filter(r=>r.match>=25).map(r=>r.f.id));l=l.filter(f=>ids.has(f.id))}
+  $('files').innerHTML='';
+  l.forEach(f=>{const b=document.createElement('button');b.className='f';if(f===cur)b.setAttribute('aria-current','true');
+    b.innerHTML=`${ST.piiList(f).length?'<span class="rs">RESTRICTED</span>':''}<b></b><span></span>`;
+    b.querySelector('b').textContent=f.title;b.querySelector('span:last-child').textContent=ST.primary(f).short+' · '+f.name;
+    b.onclick=()=>{cur=f;hl=null;held=false;list();page()};$('files').appendChild(b)});
+  if(!l.length)$('files').innerHTML='<p class="none" style="padding:18px">No files match.</p>';
+}
+function page(){
+  const f=cur,has=ST.piiList(f).length,show=revealed();
+  const text=ST.parseText(f.text).map(s=>{
+    if(s.t==='text')return esc(s.v);
+    const hs=hl===s.type?' hl':'';
+    return show?`<span class="ent t-${s.type}${hs}">${esc(s.v)}<sup>${LABEL[s.type]}</sup></span>`
+               :`<span class="bar${hs}" style="width:${Math.max(3,s.v.length*.52)}em" title="${LABEL[s.type]} covered" data-t="${s.type}"></span>`;
+  }).join('');
+  $('page').innerHTML=`<div class="hd"><span>${esc(f.name)}</span><span>${ST.KIND[f.kind]}, ${ST.size(f.bytes)}</span></div>
+    ${has?`<div class="stamp">${show?'Visible':'Restricted'}</div>`:'<div class="stamp ok">No personal data</div>'}
+    <h1></h1><p class="sum"></p><div class="doc">${text}</div>
+    <div class="meta"><span>Filed in</span><span>${esc(ST.primary(f).name)}${f.links[0][0]==='unsorted'?'':' '+ST.pct(ST.score(f))+'%'}${ST.isGuess(f)?'<span class="guess">Best guess</span>':''}</span>
+    <span>Summary</span><span>${f.ai==='ok'?'Written on this PC':'Basic summary, AI not used'}</span><span>On disk</span><span><code></code></span></div>`;
+  $('page').querySelector('h1').textContent=f.title;
+  $('page').querySelector('.sum').textContent=has&&!show?'Summary hidden while personal data is covered.':f.summary;
+  $('page').querySelector('code').textContent=ST.path(f);
+  $('st').textContent=has?(show?'Personal data is on screen':'Personal data covered'):'Nothing to cover';
+  $('hold').style.display=has?'':'none';$('hold').parentNode.querySelector('label').style.display=has?'':'none';
+  notes();
+}
+function notes(){
+  const p=ST.piiList(cur),by={};p.forEach(s=>(by[s.type]=by[s.type]||[]).push(s.v));
+  const show=revealed();
+  $('notes').innerHTML=`<h2>Found by Redact</h2>`+(p.length?Object.entries(by).map(([t,v])=>`<button class="en" data-t="${t}"><i style="background:${COLOR[t]}"></i><span><b>${LABEL[t]}</b><small>${show?esc(v.join(', ')):'Hidden'}</small></span><em>${v.length}</em></button>`).join(''):'<p class="none">No names, emails, phone numbers or account numbers in this file.</p>')
+    +`<p class="how"><b>How it works.</b> A small model finds personal data in this window. Nothing is sent anywhere, and the original file is never edited. Covering is only how it looks on screen.</p>`;
+  $('notes').querySelectorAll('.en').forEach(b=>b.onclick=()=>{hl=hl===b.dataset.t?null:b.dataset.t;page()});
+}
+// hold to reveal: pointer or Space/Enter
+const hb=$('hold');
+const down=()=>{held=true;hb.classList.add('down');page()},up=()=>{held=false;hb.classList.remove('down');page()};
+hb.addEventListener('pointerdown',e=>{e.preventDefault();down()});['pointerup','pointerleave','pointercancel'].forEach(ev=>hb.addEventListener(ev,()=>held&&up()));
+hb.addEventListener('keydown',e=>{if((e.key===' '||e.key==='Enter')&&!held){e.preventDefault();down()}});hb.addEventListener('keyup',e=>{if(e.key===' '||e.key==='Enter')up()});hb.addEventListener('blur',()=>held&&up());
+$('keep').onchange=page;
+$('q').addEventListener('input',e=>{q=e.target.value;list()});
+[['t0',0],['t1',1]].forEach(([id,v])=>$(id).onclick=()=>{tab=v;$('t0').setAttribute('aria-pressed',v===0);$('t1').setAttribute('aria-pressed',v===1);list()});
+cur=ST.byId[1];list();page();
+</script>
+</body>
+</html>

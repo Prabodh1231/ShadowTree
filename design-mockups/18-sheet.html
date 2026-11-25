@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree · Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="data.js"></script>
+<script src="kit.js"></script>
+<style>
+/* Sheet: a spreadsheet. Every file is a row, every fact about it is a column, folders are the sheet tabs along the bottom.
+   Click a header to sort, use the arrow to filter, arrow keys move the cell, the bar on top shows the whole cell. */
+:root{--bg:#f6f8f7;--paper:#fff;--ink:#1d2a24;--mute:#66756e;--grid:#d6ddd9;--head:#eaf2ee;--green:#107c41;--sel:#107c41;--selbg:#e3f2ea;--pii:#c2255c}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font:14px/1.3 "Source Sans 3",system-ui,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.app{display:grid;grid-template-rows:auto auto auto 1fr 34px 26px;height:100vh}
+.title{display:flex;align-items:center;gap:14px;padding:10px 16px 4px}
+.title .lg{width:30px;height:38px;background:var(--green);border-radius:4px;display:grid;place-items:center;color:#fff}
+.title h1{font:600 18px "Source Sans 3"}
+.title small{color:var(--mute);display:block;font-size:12px;font-weight:400}
+.menus{display:flex;gap:2px;margin-left:12px;font-size:13.5px}
+.menus button{padding:4px 9px;border-radius:4px}.menus button:hover{background:#0001}
+.title .r{margin-left:auto;display:flex;gap:10px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--grid);border-radius:4px;overflow:hidden;background:#fff}
+.seg button{padding:5px 12px;font-size:13px}.seg button[aria-pressed=true]{background:var(--green);color:#fff}
+.tool{display:flex;align-items:center;gap:4px;margin:4px 12px;padding:4px 10px;background:#e9f1ed;border-radius:24px;height:38px}
+.tool button,.tool label{display:flex;align-items:center;gap:7px;height:30px;padding:0 10px;border-radius:15px;font-size:13.5px}
+.tool button:hover{background:#0001}
+.tool .sp{width:1px;height:20px;background:var(--grid);margin:0 6px}
+.tool label{background:#fff;border:1px solid var(--grid);width:340px;padding:0 12px;cursor:text}
+.tool label:focus-within{border-color:var(--green);box-shadow:0 0 0 1px var(--green)}
+.tool input{flex:1;border:0;outline:0;font:inherit;background:none;min-width:0}
+.fx{display:flex;align-items:center;height:30px;margin:0 12px;border:1px solid var(--grid);border-radius:4px;background:#fff;font-size:13.5px}
+.fx .nm{width:92px;text-align:center;border-right:1px solid var(--grid);height:100%;display:grid;place-items:center;font-weight:500}
+.fx i{font:italic 600 14px serif;color:var(--mute);padding:0 12px;border-right:1px solid var(--grid);height:100%;display:grid;place-items:center}
+.fx .v{padding:0 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.mid{display:grid;grid-template-columns:1fr 330px;min-height:0;margin-top:8px}
+.gw{overflow:auto;background:var(--paper);border-top:1px solid var(--grid);border-bottom:1px solid var(--grid);position:relative}
+table{border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:13.5px}
+th,td{border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);padding:0 8px;height:30px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--paper)}
+thead th{position:sticky;top:0;z-index:3;background:var(--head);font-weight:400;color:var(--mute)}
+thead tr.h2 th{top:22px;background:#f3f8f5;color:var(--ink);font-weight:600;cursor:pointer;text-align:left;padding:0 4px 0 8px}
+thead tr.h1 th{height:22px;font-size:12px;text-align:center}
+th.rn,td.rn{position:sticky;left:0;z-index:2;width:46px;min-width:46px;background:var(--head);text-align:center;color:var(--mute);padding:0;font-size:12px}
+thead th.rn{z-index:4}
+tbody tr:hover td:not(.rn){background:#f6faf8}
+tbody tr[aria-selected=true] td.rn{background:#c7e4d3;color:var(--green);font-weight:700}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.cur{outline:2px solid var(--sel);outline-offset:-2px;background:var(--selbg)!important;position:relative;z-index:1}
+td.warn{background:#fdf0cd}td.pii{background:#fbe3ec;color:#8d1740}
+.fh{display:flex;align-items:center;gap:4px}.fh span{flex:1;overflow:hidden;text-overflow:ellipsis}
+.fh button{width:22px;height:22px;display:grid;place-items:center;border-radius:3px;color:var(--mute)}.fh button:hover,.fh button.on{background:#0002;color:var(--green)}
+b.hit{background:#ffe58a;font-weight:inherit}
+td .dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px}
+.flt{position:fixed;z-index:9;width:230px;background:#fff;border:1px solid var(--grid);border-radius:6px;box-shadow:0 6px 22px #0003;padding:6px;display:none}
+.flt button{display:flex;gap:10px;align-items:center;width:100%;height:30px;padding:0 8px;border-radius:4px;text-align:left}
+.flt button:hover{background:#eef5f1}
+.flt hr{border:0;border-top:1px solid var(--grid);margin:4px 0}
+.flt .ck{width:15px;height:15px;border:2px solid #8aa096;border-radius:3px;display:grid;place-items:center;color:#fff;flex:none}
+.flt .ck.on{background:var(--green);border-color:var(--green)}
+.side{background:var(--bg);padding:14px 16px;overflow:auto;border-left:1px solid var(--grid)}
+.side h3{font:600 16px "Source Sans 3";margin-bottom:2px}
+.side .k{color:var(--mute);font-size:12.5px;margin-bottom:10px}
+.page{background:#fff;border:1px solid var(--grid);border-radius:4px;padding:10px 12px;font:12.5px/1.65 Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;word-break:break-word;margin:10px 0}
+mark.pii{padding:0 3px;border-radius:2px}mark.pii.r{background:#1d2a24;color:#fff}mark.pii.o{background:#fbe3ec;color:#8d1740}
+.side dl{display:grid;grid-template-columns:78px 1fr;gap:5px 8px;font-size:13px}.side dt{color:var(--mute)}.side dd{margin:0;overflow-wrap:anywhere}
+.side .btns{display:flex;gap:8px;margin-top:14px}
+.btn{height:32px;padding:0 14px;border-radius:4px;border:1px solid var(--grid);background:#fff;font-weight:500;font-size:13px}.btn:hover{background:#eef5f1}
+.btn.p{background:var(--green);border-color:var(--green);color:#fff}.btn.p:hover{background:#0c6535}
+.sheets{display:flex;align-items:flex-end;background:var(--head);border-top:1px solid var(--grid);padding:0 6px;gap:2px;overflow:auto}
+.sheets button{height:30px;padding:0 18px;font-size:13.5px;color:var(--mute);border-radius:0 0 6px 6px;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.sheets button:hover{background:#0001}
+.sheets button[aria-selected=true]{background:#fff;color:var(--green);font-weight:600;box-shadow:inset 0 -3px 0 var(--green)}
+.sheets .dot{width:8px;height:8px;border-radius:2px}
+.sheets .add{width:34px;padding:0;justify-content:center;border-radius:50%;margin:2px 6px;height:26px;color:var(--ink)}
+.stat{display:flex;align-items:center;gap:22px;padding:0 14px;font-size:12.5px;color:var(--mute);background:var(--head);border-top:1px solid var(--grid)}
+.stat .r{margin-left:auto;display:flex;gap:16px}
+.empty{padding:40px;color:var(--mute)}
+#toast{background:#1d2a24;font-family:"Source Sans 3"}
+@media (max-width:1100px){.mid{grid-template-columns:1fr}.side{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="title"><div class="lg" id="lg"></div><div><h1>sample_messy_folder</h1><small>ShadowTree · read-only view · 13 files</small></div>
+    <div class="menus"><button>File</button><button>View</button><button id="mi">Index</button><button>Help</button></div>
+    <div class="r"><div class="seg" role="group" aria-label="Text view"><button id="vr" aria-pressed="true">Redacted</button><button id="vo" aria-pressed="false">Original</button></div></div></div>
+  <div class="tool"><button id="tn">Index (Read-Only)</button><span class="sp"></span><button id="tf">Clear filters</button><span class="sp"></span>
+    <label><span id="si"></span><input id="q" placeholder="Search your files" aria-label="Search your files" autocomplete="off"></label></div>
+  <div class="fx"><div class="nm" id="fn"></div><i>fx</i><div class="v" id="fv"></div></div>
+  <div class="mid">
+    <div class="gw" id="gw"><table id="tb"></table></div>
+    <aside class="side" id="side" aria-label="Row details"></aside>
+  </div>
+  <div class="sheets" id="sheets" role="tablist"></div>
+  <div class="stat"><span id="s1"></span><div class="r"><span id="s2"></span><span id="s3"></span></div></div>
+</div>
+<div class="flt" id="flt"></div>
+<script>
+const {S,$,$$,icon,esc,FCOL}=KIT;
+const COLS=[{k:'name',t:'Name',w:250},{k:'folder',t:'Folder',w:190},{k:'match',t:'Match',w:84,num:1},{k:'kind',t:'Type',w:80},{k:'size',t:'Size',w:90,num:1},{k:'pii',t:'Personal data',w:170},{k:'summary',t:'Summary',w:520}];
+let sheet='all',q='',sort=null,filt={},sel={r:0,c:0},red=true;
+$('#lg').innerHTML=icon('grid',20);$('#si').innerHTML=icon('search',15);
+const SH=[['all','All files'],...S.folders.map(f=>[f.id,f.name]),['pii','Sensitive'],['guess','Needs a look']];
+function rows(){
+  let L;
+  if(q.trim())L=KIT.run(q).hits.map(h=>({f:h.f,m:h.match}));
+  else{const F=sheet==='all'?S.files:sheet==='pii'?S.sensitive():sheet==='guess'?S.files.filter(S.isGuess):S.inFolder(sheet);
+    L=F.map(f=>({f,m:Math.round((S.fById[sheet]?f.links.find(l=>l[0]===sheet)[1]:S.score(f))*100)}))}
+  L=L.map(r=>({...r,v:{name:r.f.name,folder:S.primary(r.f).name,match:r.m,kind:S.KIND[r.f.kind],size:r.f.bytes,pii:S.piiTypes(r.f).map(KIT.nice).join(', '),summary:r.f.summary}}));
+  Object.keys(filt).forEach(k=>{if(filt[k])L=L.filter(r=>filt[k].has(String(r.v[k])))});
+  if(sort)L.sort((a,b)=>{const x=a.v[sort.k],y=b.v[sort.k];return sort.d*(typeof x==='number'?x-y:String(x).localeCompare(String(y)))});
+  else if(q.trim())L.sort((a,b)=>b.m-a.m);
+  return L;
+}
+const L26=i=>String.fromCharCode(65+i);
+function draw(){
+  const R=rows();draw.R=R;sel.r=Math.min(sel.r,Math.max(0,R.length-1));
+  let h=`<colgroup><col style="width:46px">${COLS.map(c=>`<col style="width:${c.w}px">`).join('')}</colgroup><thead><tr class="h1"><th class="rn"></th>${COLS.map((c,i)=>`<th>${L26(i)}</th>`).join('')}</tr><tr class="h2"><th class="rn"></th>${COLS.map((c,i)=>`<th data-c="${i}"><div class="fh"><span>${c.k==='match'&&!q?'Fit':c.t}${sort&&sort.k===c.k?(sort.d>0?' ↑':' ↓'):''}</span><button data-f="${c.k}" class="${filt[c.k]?'on':''}" aria-label="Filter ${c.t}">${icon('chevD',13)}</button></div></th>`).join('')}</tr></thead><tbody>`;
+  R.forEach((r,ri)=>{const f=r.f;h+=`<tr data-r="${ri}" aria-selected="${ri===sel.r}"><td class="rn">${ri+2}</td>`+COLS.map((c,ci)=>{
+    const v=r.v[c.k];let cls=(c.num?'num ':'')+(sel.r===ri&&sel.c===ci?'cur ':''),cell;
+    if(c.k==='name')cell=`${icon(KIT.kindIcon(f),14)} ${q?KIT.hl(v,q):esc(v)}`;
+    else if(c.k==='folder')cell=`<i class="dot" style="background:${FCOL[S.primary(f).id]}"></i>${esc(v)}`;
+    else if(c.k==='match'){cell=v+'%'+(S.isGuess(f)&&!q?' ?':'');if(S.isGuess(f))cls+='warn '}
+    else if(c.k==='size')cell=S.size(v);
+    else if(c.k==='pii'){cell=esc(v);if(v)cls+='pii '}
+    else cell=q?KIT.hl(v,q):esc(v);
+    return `<td data-ci="${ci}" class="${cls}" ${c.k==='match'&&S.isGuess(f)?'title="Best guess: the match is under 50%"':''}>${cell}</td>`}).join('')+'</tr>'});
+  if(!R.length)h+=`<tr><td class="rn"></td><td colspan="${COLS.length}" class="empty" style="height:80px">${q?`Nothing matches “${esc(q)}”.`:'No rows match the filters.'}</td></tr>`;
+  $('#tb').innerHTML=h+'</tbody>';
+  $('#tb').style.width=(46+COLS.reduce((a,c)=>a+c.w,0))+'px';
+  $$('#tb tbody tr[data-r]').forEach(tr=>tr.onclick=e=>{const td=e.target.closest('td[data-ci]');sel={r:+tr.dataset.r,c:td?+td.dataset.ci:sel.c};draw()});
+  $$('#tb th[data-c]').forEach(th=>th.onclick=e=>{if(e.target.closest('[data-f]'))return;const k=COLS[+th.dataset.c].k;sort=sort&&sort.k===k?(sort.d>0?{k,d:-1}:null):{k,d:1};draw()});
+  $$('#tb [data-f]').forEach(b=>b.onclick=e=>{e.stopPropagation();menu(b)});
+  /* sheets */
+  $('#sheets').innerHTML=SH.map(([id,t])=>`<button role="tab" aria-selected="${sheet===id&&!q}" data-s="${id}">${S.fById[id]?`<i class="dot" style="background:${FCOL[id]}"></i>`:''}${esc(t)}</button>`).join('')+`<button class="add" id="add" aria-label="New folder">${icon('plus',15)}</button>`;
+  $$('#sheets [data-s]').forEach(b=>b.onclick=()=>{sheet=b.dataset.s;q='';$('#q').value='';filt={};sort=null;sel={r:0,c:0};draw()});
+  $('#add').onclick=()=>KIT.toast('Created “New folder”. Sorting your files into it…');
+  info();
+}
+function info(){
+  const R=draw.R,r=R[sel.r],c=COLS[sel.c];
+  $('#s1').textContent=q?`${R.length} match${R.length===1?'':'es'}`:`${R.length} of ${sheet==='all'?13:R.length} rows`;
+  $('#s2').textContent=c.k==='size'?'Sum: '+S.size(R.reduce((a,x)=>a+x.f.bytes,0)):'Count: '+R.length;
+  $('#s3').innerHTML=icon('lock',12)+' Read-only · nothing is written to your disk';
+  const side=$('#side');
+  if(!r){side.innerHTML='<div class="empty">Select a row.</div>';$('#fn').textContent='';$('#fv').textContent='';return}
+  const f=r.f,fo=S.primary(f);
+  side.innerHTML=`<h3>${esc(f.title)}</h3><div class="k">Row ${sel.r+2} · ${esc(f.name)}</div><div style="font-size:13.5px;line-height:1.5">${esc(f.summary)}</div><div class="page">${KIT.body(f,red,q)}</div>
+  <dl><dt>Folder</dt><dd>${esc(fo.name)}</dd><dt>Match</dt><dd>${r.m}%${S.isGuess(f)?' · best guess':''}</dd><dt>Tags</dt><dd>${esc(f.tags.join(', '))}</dd><dt>On disk</dt><dd>${esc(S.path(f))}</dd></dl>
+  <div class="btns"><button class="btn p" id="rv">Reveal on Disk</button><button class="btn" id="cp">Copy path</button></div>`;
+  $('#rv').onclick=()=>KIT.toast('Revealed in Windows Explorer');$('#cp').onclick=()=>KIT.toast('Path copied');
+  /* the formula bar shows the whole cell, so long summaries are readable */
+  const v=r.v[c.k];$('#fn').textContent=L26(sel.c)+(sel.r+2);
+  $('#fv').textContent=c.k==='size'?S.size(v)+' ('+v.toLocaleString()+' bytes)':c.k==='match'?v+'%':v;
+}
+function menu(b){
+  const k=b.dataset.f,m=$('#flt'),vals=[...new Set(S.files.map(f=>({name:f.name,folder:S.primary(f).name,match:null,kind:S.KIND[f.kind],size:f.bytes,pii:S.piiTypes(f).map(KIT.nice).join(', '),summary:f.summary})[k]))].filter(v=>v!==null&&v!=='');
+  const cur=filt[k];const rc=b.getBoundingClientRect();
+  m.innerHTML=`<button data-o="a">${icon('chevU',14)}Sort A to Z</button><button data-o="z">${icon('chevD',14)}Sort Z to A</button><hr>`+(['folder','kind','pii'].includes(k)?vals.map(v=>`<button data-v="${esc(v)}"><span class="ck ${!cur||cur.has(String(v))?'on':''}">${!cur||cur.has(String(v))?icon('check',11):''}</span>${esc(v)}</button>`).join('')+'<hr><button data-o="clr">Clear filter</button>':'<button data-o="clr">Clear filter</button>');
+  m.style.display='block';m.style.left=Math.min(rc.left,innerWidth-240)+'px';m.style.top=rc.bottom+4+'px';
+  $$('#flt button').forEach(x=>x.onclick=e=>{e.stopPropagation();
+    if(x.dataset.o==='a'){sort={k,d:1};m.style.display='none';draw()}
+    else if(x.dataset.o==='z'){sort={k,d:-1};m.style.display='none';draw()}
+    else if(x.dataset.o==='clr'){delete filt[k];m.style.display='none';draw()}
+    else{const all=new Set(vals.map(String));const s=filt[k]||new Set(all);const v=x.dataset.v;s.has(v)?s.delete(v):s.add(v);filt[k]=s.size===all.size?null:s;draw();menu($(`#tb [data-f="${k}"]`))}});
+}
+addEventListener('click',()=>$('#flt').style.display='none');
+$('#tf').onclick=()=>{filt={};sort=null;draw()};
+$('#tn').onclick=$('#mi').onclick=()=>{$('#tn').disabled=true;KIT.scan(v=>$('#tn').textContent='Indexing '+Math.round(v*100)+'%',()=>{$('#tn').textContent='Index (Read-Only)';$('#tn').disabled=false;KIT.toast('Indexed 13 files. Nothing was changed.')})};
+function setRed(v){red=v;$('#vr').setAttribute('aria-pressed',v);$('#vo').setAttribute('aria-pressed',!v);info()}
+$('#vr').onclick=()=>setRed(true);$('#vo').onclick=()=>setRed(false);
+$('#q').oninput=e=>{q=e.target.value;sel={r:0,c:0};draw()};
+addEventListener('keydown',e=>{
+  if(document.activeElement===$('#q')){if(e.key==='Escape'||e.key==='Enter'){$('#q').blur()}return}
+  const R=draw.R;let {r,c}=sel;
+  if(e.key==='ArrowDown')r=Math.min(R.length-1,r+1);else if(e.key==='ArrowUp')r=Math.max(0,r-1);else if(e.key==='ArrowRight'||e.key==='Tab'){e.preventDefault();c=Math.min(COLS.length-1,c+1)}else if(e.key==='ArrowLeft')c=Math.max(0,c-1);
+  else if(e.key==='f'&&e.ctrlKey){e.preventDefault();$('#q').focus();return}
+  else if(e.key==='Enter'){KIT.toast('Revealed in Windows Explorer');return}
+  else return;
+  e.preventDefault();sel={r,c};draw();const t=$('td.cur');t&&t.scrollIntoView({block:'nearest',inline:'nearest'});
+});
+draw();
+</script>
+</body>
+</html>

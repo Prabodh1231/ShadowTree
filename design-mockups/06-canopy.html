@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree 06 · Canopy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Concept: the product's name, taken literally. Your folder is a tree; the virtual tree is
+     the shadow it casts. Branches are folders, leaves are files (size = area, distance = confidence).
+     Drag the light and the shadow turns. */
+  :root{--bg:#e3e9ea;--ink:#1b2430;--mute:#5d6a76;--panel:#f4f7f7;--line:#c8d2d5;--shade:rgba(26,35,70,.26)}
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font:15px/1.45 "Albert Sans",sans-serif;display:flex;flex-direction:column;overflow:hidden}
+  header{display:flex;align-items:center;gap:22px;padding:16px 28px;flex:none}
+  .brand{font-weight:800;font-size:21px;letter-spacing:-.02em}
+  .search input{width:340px;max-width:40vw;font:inherit;border:1.5px solid #9eacb2;border-radius:99px;padding:8px 18px;background:rgba(255,255,255,.65)}
+  .search input:focus{outline:2px solid #2f5e8c;outline-offset:2px}
+  .sun{margin-left:auto;display:flex;align-items:center;gap:12px;color:var(--mute);font-size:14px}
+  .sun input{width:200px;accent-color:#2f5e8c}
+  .btn{font:700 14px "Albert Sans";background:var(--ink);color:#fff;border:0;border-radius:99px;padding:9px 18px;cursor:pointer}
+  .btn:focus-visible,.sun input:focus-visible{outline:2px solid #2f5e8c;outline-offset:3px}
+  .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}
+  main{flex:1;min-height:0;display:grid;grid-template-columns:1fr 360px}
+  .stage{position:relative;min-height:0}
+  svg{width:100%;height:100%;display:block}
+  .leaf{cursor:pointer;transition:opacity .2s}
+  .leaf:focus-visible circle.hit{stroke:var(--ink);stroke-width:3}
+  .leaf text{font:600 12.5px "Albert Sans";fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+  .leaf.dim{opacity:.18}
+  .leaf:hover circle.core{transform-box:fill-box;transform-origin:center;transform:scale(1.18)}
+  .leaf circle.core{transition:transform .15s}
+  .fname{font:800 19px "Albert Sans";fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:5px;stroke-linejoin:round}
+  .fcount{font:500 13px "Albert Sans";fill:var(--mute);paint-order:stroke;stroke:var(--bg);stroke-width:4px}
+  aside{background:var(--panel);border-left:1px solid var(--line);padding:24px 26px;overflow:auto}
+  aside h2{font:800 26px/1.1 "Albert Sans";letter-spacing:-.02em;margin-bottom:6px}
+  aside .sub{color:var(--mute);margin-bottom:14px}
+  aside p{margin:10px 0}
+  .chip{display:inline-block;border-radius:99px;padding:2px 12px;font-size:13px;font-weight:700;color:#fff}
+  .chip.g{background:transparent!important;border:1.5px dashed var(--ink);color:var(--ink)}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}
+  .stats div{border-top:2px solid var(--ink);padding-top:6px;color:var(--mute);font-size:13px}
+  .stats b{display:block;font:800 28px "Albert Sans";color:var(--ink);font-variant-numeric:tabular-nums}
+  .seg{display:inline-flex;border:1.5px solid var(--ink);border-radius:99px;overflow:hidden;margin:8px 0}
+  .seg button{all:unset;cursor:pointer;padding:5px 14px;font-weight:700;font-size:13px}
+  .seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+  .seg button:focus-visible{outline:2px solid #2f5e8c;outline-offset:-3px}
+  pre{font:13px/1.55 "Cascadia Mono",Consolas,monospace;background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px;white-space:pre-wrap}
+  .rb{background:var(--ink);color:var(--ink);border-radius:2px}
+  .path{font:12px "Cascadia Mono",Consolas,monospace;color:var(--mute);word-break:break-all}
+  .row{display:flex;gap:8px;margin-top:12px}
+  .legend{position:absolute;left:28px;bottom:20px;color:var(--mute);font-size:13px;display:flex;gap:18px;align-items:center}
+  .legend svg{width:18px;height:18px;display:inline-block;vertical-align:-4px;margin-right:6px}
+  @media (max-width:900px){main{grid-template-columns:1fr;grid-template-rows:1fr auto}aside{border-left:0;border-top:1px solid var(--line);max-height:40vh}.sun input{width:110px}.search input{width:180px}.legend{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">ShadowTree</div>
+  <label class="search"><input id="q" type="search" placeholder="Find a leaf by meaning" autocomplete="off" aria-label="Search files"></label>
+  <button class="btn" type="button">Index folder</button>
+  <label class="sun">Light <input id="sun" type="range" min="0" max="359" value="130" aria-label="Direction of the light"></label>
+</header>
+<main>
+  <div class="stage"><svg id="svg" viewBox="0 0 1000 760" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Tree of virtual folders and files"></svg>
+    <div class="legend"><span><svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="#3f7d5b"/></svg>Size is area</span><span><svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="#1b2430" stroke-width="2" stroke-dasharray="3 2"/></svg>Best guess</span><span><svg viewBox="0 0 18 18"><rect x="2" y="6" width="14" height="6" fill="#1b2430"/></svg>Personal data</span></div></div>
+  <aside id="side"></aside>
+</main>
+<script src="data.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const NS='http://www.w3.org/2000/svg';
+const COL={fin:'#b5532f',work:'#2f5e8c',personal:'#7b4b8f',media:'#3f7d5b',unsorted:'#80878f'};
+const ANG={fin:198,work:270,media:342,unsorted:54,personal:126};
+const CX=500,CY=380,rad=d=>d*Math.PI/180;
+let sel=null,redacted=true,ids=null;
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function build(){
+  let branches='',leaves='',labels='';
+  const nodes={};
+  ST.folders.forEach(fo=>{
+    const a=ANG[fo.id],nx=CX+155*Math.cos(rad(a)),ny=CY+155*Math.sin(rad(a));nodes[fo.id]=[nx,ny];
+    const mx=CX+80*Math.cos(rad(a+14)),my=CY+80*Math.sin(rad(a+14));
+    branches+=`<path d="M${CX},${CY} Q${mx},${my} ${nx},${ny}" stroke="${COL[fo.id]}" stroke-width="7" stroke-linecap="round" fill="none"/>`;
+    branches+=`<circle cx="${nx}" cy="${ny}" r="11" fill="${COL[fo.id]}"/>`;
+    const list=ST.files.filter(f=>f.links[0][0]===fo.id);
+    list.forEach((f,i)=>{
+      const off=(i-(list.length-1)/2)*(list.length>3?30:38),d=62+(1-ST.score(f))*95+(fo.id==='unsorted'?20:0),aa=a+off;
+      const lx=nx+d*Math.cos(rad(aa)),ly=ny+d*Math.sin(rad(aa));
+      branches+=`<path d="M${nx},${ny} L${lx},${ly}" stroke="${COL[fo.id]}" stroke-width="2.5" stroke-linecap="round" fill="none"${ST.isGuess(f)?' stroke-dasharray="2 7"':''}/>`;
+      const r=Math.max(9,Math.min(24,5+Math.sqrt(f.bytes/1024)*.5));
+      const right=Math.cos(rad(aa))>=0;
+      leaves+=`<g class="leaf" data-id="${f.id}" tabindex="0" role="button" aria-label="${esc(f.title)}">
+        <circle class="hit" cx="${lx}" cy="${ly}" r="${r+6}" fill="transparent" stroke="transparent"/>
+        <circle class="core" cx="${lx}" cy="${ly}" r="${r}" fill="${ST.isGuess(f)?'#e3e9ea':COL[fo.id]}" ${ST.isGuess(f)?`stroke="${COL[fo.id]}" stroke-width="3" stroke-dasharray="4 3"`:''}/>
+        ${ST.piiList(f).length?`<rect x="${lx-r*.62}" y="${ly-3}" width="${r*1.24}" height="6" fill="#1b2430"/>`:''}
+        <text x="${lx+(right?r+7:-r-7)}" y="${ly+4}" text-anchor="${right?'start':'end'}">${esc(f.title)}</text></g>`;
+    });
+    const pa=fo.id==='media'?a-90:a+90,px=Math.cos(rad(pa)),py=Math.sin(rad(pa)),anc=px>.25?'start':px<-.25?'end':'middle';
+    labels+=`<text class="fname" x="${nx+px*22}" y="${ny+py*22+(Math.abs(py)>.7?(py>0?10:-2):5)}" text-anchor="${anc}">${fo.name}</text>`;
+  });
+  const root=`<circle cx="${CX}" cy="${CY}" r="26" fill="#1b2430"/><text x="${CX}" y="${CY+5}" text-anchor="middle" fill="#fff" style="font:700 12px 'Albert Sans'">disk</text>`;
+  const tree=`<g id="tree">${branches}${leaves.replace(/<text[^>]*>.*?<\/text>/gs,'').replace(/<g class="leaf"[^>]*>/g,'<g>')}${root}</g>`;
+  $('svg').innerHTML=`<defs><filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feColorMatrix values="0 0 0 0 .1  0 0 0 0 .14  0 0 0 0 .3  0 0 0 .5 0"/><feGaussianBlur stdDeviation="1.1"/></filter>
+    <g id="shapes">${branches}${leaves.replace(/<text[^>]*>.*?<\/text>/gs,'').replace(/<g class="leaf"[^>]*>/g,'<g>')}<circle cx="${CX}" cy="${CY}" r="26"/></g></defs>
+    <use id="shadow" href="#shapes" filter="url(#sh)"/>
+    <g id="live">${branches}${root}${leaves}${labels}</g>`;
+  $('svg').querySelectorAll('.leaf').forEach(g=>{const f=ST.byId[g.dataset.id];g.onclick=()=>pick(f);g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick(f)}}});
+  shade();dimming();
+}
+function shade(){const a=rad(+$('sun').value),d=34;$('shadow').setAttribute('transform',`translate(${(d*Math.cos(a)).toFixed(1)} ${(d*Math.sin(a)).toFixed(1)})`)}
+function dimming(){document.querySelectorAll('#live .leaf').forEach(g=>g.classList.toggle('dim',!!ids&&!ids.has(+g.dataset.id)))}
+function pick(f){sel=f;redacted=true;side()}
+function side(){
+  const s=$('side');
+  if(!sel){
+    const n=ST.files.length;
+    s.innerHTML=`<h2>Your folder, as a tree</h2><p class="sub">The solid tree is how your files are filed. The shadow is what it casts. Your real folder is not touched.</p>
+      <div class="stats"><div><b>${n}</b>files read</div><div><b>${ST.folders.length-1}</b>virtual folders</div><div><b>${ST.sensitive().length}</b>with personal data</div><div><b>0</b>files changed on disk</div></div>
+      <p>Closer to the trunk means a surer match. Pick a leaf to read it.</p>`;return}
+  const f=sel,fo=ST.primary(f);
+  const txt=ST.parseText(f.text).map(x=>x.t==='text'?esc(x.v):(redacted?`<span class="rb">${'█'.repeat(Math.max(4,x.v.length))}</span>`:esc(x.v))).join('');
+  s.innerHTML=`<span class="chip${ST.isGuess(f)?' g':''}" style="background:${COL[fo.id]}">${fo.name}${fo.id==='unsorted'?'':' '+ST.pct(ST.score(f))+'%'}${ST.isGuess(f)?', best guess':''}</span>
+    <h2 style="margin-top:12px"></h2><p></p>
+    ${ST.piiList(f).length?`<div class="seg" role="group" aria-label="Text view"><button aria-pressed="${redacted}" data-r="1">Redacted</button><button aria-pressed="${!redacted}" data-r="0">Original</button></div>`:''}
+    <pre>${txt}</pre><p class="path"></p><div class="row"><button class="btn" type="button">Reveal on disk</button><button class="btn ghost" id="back" type="button">Back to tree</button></div>`;
+  s.querySelector('h2').textContent=f.title;s.querySelector('p').textContent=f.summary;s.querySelector('.path').textContent=ST.path(f);
+  s.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{redacted=b.dataset.r==='1';side()});
+  $('back').onclick=()=>{sel=null;side()};
+}
+$('sun').addEventListener('input',shade);
+$('q').addEventListener('input',e=>{const v=e.target.value.trim();ids=v?new Set(ST.search(v).filter(r=>r.match>=25).map(r=>r.f.id)):null;dimming()});
+document.fonts&&document.fonts.ready.then(()=>{});
+build();side();
+</script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree 08 · Sort desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&display=swap" rel="stylesheet">
+<style>
+  /* Concept: the AI is sure about most files, so show only the ones it isn't. A triage desk:
+     one file at a time, the model's guess pre-selected, number keys to file it in a virtual bin.
+     Nothing moves on disk. */
+  :root{--bg:#f7c948;--ink:#1a1e3c;--coral:#ff5a36;--cobalt:#2d4bff;--pink:#ff9ec7;--white:#fffdf7}
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font:500 16px/1.4 "Bricolage Grotesque",sans-serif;display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}
+  header{display:flex;align-items:center;gap:26px;padding:18px 32px}
+  .brand{font:800 24px "Bricolage Grotesque";font-stretch:80%;letter-spacing:-.02em}
+  .pips{display:flex;gap:6px;align-items:center;flex:1;max-width:420px}
+  .pips i{flex:1;height:10px;border:2.5px solid var(--ink);border-radius:99px;background:transparent;transition:background .3s}
+  .pips i.d{background:var(--ink)}
+  .pt{font-weight:700;white-space:nowrap}
+  .hr{margin-left:auto;display:flex;gap:10px}
+  .b{all:unset;cursor:pointer;padding:8px 16px;border:2.5px solid var(--ink);border-radius:99px;font-weight:700;font-size:15px;background:var(--white)}
+  .b:hover{background:var(--ink);color:var(--white)}
+  .b:focus-visible{outline:3px solid var(--cobalt);outline-offset:3px}
+  .b[disabled]{opacity:.4;pointer-events:none}
+  main{display:grid;grid-template-columns:260px 1fr;gap:20px;padding:0 32px;min-height:0}
+  .q{padding-top:8px;overflow:auto}
+  .q h2{font:800 20px "Bricolage Grotesque";font-stretch:80%;margin-bottom:10px}
+  .q ol{list-style:none;padding:0;display:flex;flex-direction:column;gap:8px}
+  .q li{border:2.5px solid var(--ink);border-radius:14px;padding:8px 12px;background:var(--white);font-size:14px;line-height:1.25;opacity:.75}
+  .q li.on{opacity:1;box-shadow:4px 4px 0 var(--ink);transform:translate(-2px,-2px);background:#fff}
+  .q li.done{opacity:.35;text-decoration:line-through}
+  .q li small{display:block;color:#585c7a;font-size:12px}
+  .stage{position:relative;display:flex;align-items:center;justify-content:center;min-height:0}
+  .card{width:min(660px,100%);background:var(--white);border:3px solid var(--ink);border-radius:22px;box-shadow:9px 9px 0 var(--ink);padding:26px 30px 24px;transform:rotate(-1.2deg);display:grid;grid-template-columns:1fr 250px;gap:26px;will-change:transform}
+  .card.enter{animation:in .38s cubic-bezier(.2,1.2,.4,1)}
+  @keyframes in{from{transform:translateY(40px) rotate(4deg);opacity:0}}
+  .kind{display:inline-block;background:var(--ink);color:var(--white);font:700 13px "Bricolage Grotesque";padding:2px 10px;border-radius:99px}
+  .card h1{font:800 38px/1 "Bricolage Grotesque";font-stretch:78%;letter-spacing:-.02em;margin:12px 0 4px}
+  .nm{font:13px "Cascadia Mono",Consolas,monospace;color:#585c7a;word-break:break-all}
+  .card p{margin:14px 0;max-width:36ch}
+  .tags{display:flex;flex-wrap:wrap;gap:6px}
+  .tags span{border:2px solid var(--ink);border-radius:99px;padding:0 10px;font-size:13px}
+  .pii{display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-weight:700;font-size:14px}
+  .pii i{width:34px;height:10px;background:var(--ink);display:inline-block;border-radius:2px}
+  .ai{border-left:3px dashed var(--ink);padding-left:22px}
+  .ai h3{font:800 17px "Bricolage Grotesque";font-stretch:80%;margin-bottom:12px}
+  .cd{margin-bottom:12px}
+  .cd .l{display:flex;justify-content:space-between;font-size:14px;font-weight:700;margin-bottom:3px}
+  .cd .t{height:14px;border:2.5px solid var(--ink);border-radius:99px;overflow:hidden;background:#fff}
+  .cd .t i{display:block;height:100%}
+  .why{font-size:13px;color:#585c7a;margin-top:8px}
+  .bins{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;padding:18px 32px 26px}
+  .bin{all:unset;box-sizing:border-box;cursor:pointer;position:relative;border:3px solid var(--ink);border-radius:18px;padding:12px 14px 12px;min-height:104px;display:flex;flex-direction:column;justify-content:space-between;transition:transform .15s}
+  .bin:hover{transform:translateY(-4px)}
+  .bin:focus-visible{outline:4px solid var(--ink);outline-offset:3px}
+  .bin .k{position:absolute;top:10px;right:12px;width:28px;height:28px;border:2.5px solid currentColor;border-radius:8px;display:grid;place-items:center;font:800 15px "Bricolage Grotesque"}
+  .bin b{font:800 21px/1.05 "Bricolage Grotesque";font-stretch:80%;max-width:11ch;letter-spacing:-.01em}
+  .bin span{font-size:14px;font-weight:700}
+  .bin.pick{box-shadow:0 0 0 4px var(--bg),0 0 0 8px var(--ink);transform:translateY(-6px)}
+  .bin .tip{position:absolute;left:50%;top:-30px;transform:translateX(-50%);background:var(--ink);color:#fff;font:700 12px "Bricolage Grotesque";padding:3px 10px;border-radius:99px;white-space:nowrap;display:none}
+  .bin.pick .tip{display:block}
+  .bin.c-fin{background:var(--coral);color:var(--ink)}.bin.c-work{background:var(--cobalt);color:#fff}.bin.c-personal{background:var(--pink)}.bin.c-media{background:var(--ink);color:#fff}.bin.c-unsorted{background:var(--white);border-style:dashed}
+  .done-card{max-width:560px;text-align:left}
+  .done-card h1{font:800 64px/.95 "Bricolage Grotesque";font-stretch:75%;letter-spacing:-.03em}
+  .done-card p{font-size:19px;margin:14px 0 20px;max-width:34ch}
+  .note{padding:0 32px 0;text-align:center;font-size:13px;color:#4a3d0b;margin-top:-6px}
+  @media (max-width:900px){main{grid-template-columns:1fr}.q{display:none}.card{grid-template-columns:1fr}.ai{border-left:0;border-top:3px dashed var(--ink);padding:16px 0 0}.bins{grid-template-columns:repeat(2,1fr);padding:12px 16px}.pips,.hr .b:first-child{display:none}body{overflow:auto}header,main{padding-left:16px;padding-right:16px}}
+  @media (prefers-reduced-motion:reduce){.card.enter{animation:none}.bin{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">ShadowTree</div>
+  <div class="pips" id="pips" aria-hidden="true"></div><div class="pt" id="pt"></div>
+  <div class="hr"><button class="b" id="skip" type="button">Skip (S)</button><button class="b" id="undo" type="button">Undo (Z)</button></div>
+</header>
+<main>
+  <aside class="q"><h2>Needs your eye</h2><ol id="ql"></ol></aside>
+  <section class="stage" id="stage"></section>
+</main>
+<div>
+  <div class="bins" id="bins" role="group" aria-label="Virtual folders"></div>
+  <p class="note">Filing here only changes the virtual folder. Your real files stay exactly where they are.</p>
+</div>
+<script src="data.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const COL={fin:'#ff5a36',work:'#2d4bff',personal:'#ff9ec7',media:'#1a1e3c',unsorted:'#c9c4b3'};
+const ids=[9,10,13,7,5];
+let pos=0,filed={},hist=[];
+function cands(f){
+  const m=Object.fromEntries(f.links);const out=[];
+  ST.folders.forEach((fo,i)=>{let s=m[fo.id];if(s==null)s=Math.max(.04,Math.min((ST.score(f)||.5)-.12,((f.id*37+i*17)%28)/100+.05));out.push([fo.id,fo.id==='unsorted'?(f.links[0][0]==='unsorted'?1:.08):s])});
+  return out.sort((a,b)=>b[1]-a[1]);
+}
+function guess(f){const c=cands(f)[0];return c[0]}
+function pips(){$('pips').innerHTML=ids.map((id,i)=>`<i class="${filed[id]?'d':''}"></i>`).join('');const n=Object.keys(filed).length;$('pt').textContent=n+' of '+ids.length+' filed'}
+function queue(){$('ql').innerHTML=ids.map((id,i)=>{const f=ST.byId[id];return `<li class="${filed[id]?'done':i===pos?'on':''}">${esc(f.title)}<small>${esc(f.name)}</small></li>`}).join('')}
+function bins(){
+  const f=pos<ids.length?ST.byId[ids[pos]]:null,g=f&&guess(f);
+  $('bins').innerHTML=ST.folders.map((fo,i)=>{const n=ST.inFolder(fo.id).filter(x=>x.links[0][0]===fo.id&&!ids.includes(x.id)).length+Object.values(filed).filter(v=>v===fo.id).length;
+    return `<button class="bin c-${fo.id}${g===fo.id?' pick':''}" data-f="${fo.id}" ${f?'':'disabled'}><span class="tip">Best guess</span><i class="k">${i+1}</i><b>${fo.name}</b><span>${n} files</span></button>`}).join('');
+  $('bins').querySelectorAll('.bin').forEach(b=>b.onclick=()=>file(b.dataset.f));
+}
+function card(anim){
+  const st=$('stage');
+  if(pos>=ids.length){
+    st.innerHTML=`<div class="done-card"><h1>All sorted.</h1><p>${ids.length} files filed in their virtual folders. 0 files changed on disk.</p><button class="b" id="again" type="button">Start over</button></div>`;
+    $('again').onclick=()=>{filed={};hist=[];pos=0;render(true)};return}
+  const f=ST.byId[ids[pos]],c=cands(f).slice(0,3),g=c[0];
+  st.innerHTML=`<article class="card${anim?' enter':''}" id="card"><div><span class="kind">${ST.KIND[f.kind]}, ${ST.size(f.bytes)}</span><h1>${esc(f.title)}</h1><div class="nm">${esc(f.name)}</div><p>${esc(f.summary)}</p>
+    <div class="tags">${f.tags.map(t=>`<span>${esc(t)}</span>`).join('')}</div>${ST.piiList(f).length?'<div class="pii"><i></i>Contains personal data</div>':''}</div>
+    <div class="ai"><h3>My guess</h3>${c.map(([id,s],i)=>`<div class="cd"><div class="l"><span>${ST.fById[id].short}${i===0?'':''}</span><span>${ST.pct(s)}%</span></div><div class="t"><i style="width:${ST.pct(s)}%;background:${COL[id]}"></i></div></div>`).join('')}
+    <p class="why" style="margin:0">${ST.pct(g[1])<50?'Under 50%. I could not be sure, so I am asking.':'Two folders are close. Pick the one you would look in first.'}</p></div></article>`;
+}
+function file(fid){
+  if(pos>=ids.length)return;const id=ids[pos],cardEl=$('card'),binEl=$('bins').querySelector(`[data-f="${fid}"]`);
+  const go=()=>{filed[id]=fid;hist.push([id,pos]);pos++;render(true)};
+  if(cardEl&&binEl&&!matchMedia('(prefers-reduced-motion:reduce)').matches){
+    const a=cardEl.getBoundingClientRect(),b=binEl.getBoundingClientRect();
+    const dx=b.left+b.width/2-(a.left+a.width/2),dy=b.top+b.height/2-(a.top+a.height/2);
+    cardEl.animate([{transform:'rotate(-1.2deg)'},{transform:`translate(${dx}px,${dy}px) scale(.12) rotate(8deg)`,opacity:.2}],{duration:420,easing:'cubic-bezier(.5,0,.8,.4)',fill:'forwards'}).onfinish=go;
+  }else go();
+}
+function undo(){const h=hist.pop();if(!h)return;delete filed[h[0]];pos=h[1];render(true)}
+function render(anim){pips();queue();bins();card(anim);$('undo').disabled=!hist.length;$('skip').disabled=pos>=ids.length}
+$('undo').onclick=undo;$('skip').onclick=()=>{if(pos<ids.length-1){const x=ids.splice(pos,1)[0];ids.push(x);render(true)}};
+addEventListener('keydown',e=>{if(e.metaKey||e.ctrlKey)return;
+  if(/^[1-5]$/.test(e.key)){file(ST.folders[+e.key-1].id)}
+  else if(e.key==='Enter'&&pos<ids.length){file(guess(ST.byId[ids[pos]]))}
+  else if(e.key==='z'||e.key==='Z')undo();else if(e.key==='s'||e.key==='S')$('skip').click()});
+render(false);
+</script>
+</body>
+</html>

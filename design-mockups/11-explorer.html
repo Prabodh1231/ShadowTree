@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree · Explorer</title>
+<script src="data.js"></script>
+<script src="kit.js"></script>
+<style>
+/* Explorer: the layout everyone on Windows already knows. Nav pane, address bar, details list, preview pane.
+   Only the skin is ours: a cool silver mica with one indigo. */
+:root{--mica:#eef0f6;--mica2:#e4e7f1;--paper:#fff;--ink:#1b1d2a;--mute:#5d6379;--line:#d9dce8;--acc:#4a4fb5;--acc-soft:#e3e5f8;--warn:#a85d00;--pii:#c2255c}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font:14px/1.35 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--mica);overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.ic{flex:none}
+.win{display:grid;grid-template-rows:40px 48px 46px 1fr 28px;height:100vh}
+/* title bar */
+.title{display:flex;align-items:flex-end;padding:6px 0 0 10px;background:var(--mica2)}
+.tab{display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;background:var(--mica);border-radius:8px 8px 0 0;font-size:13px;min-width:260px}
+.tab .ic{color:var(--acc)}
+.tab .x{margin-left:auto;opacity:.6}
+.title .plus{padding:0 12px;opacity:.7}
+.wc{margin-left:auto;display:flex;align-self:stretch}
+.wc span{width:46px;display:grid;place-items:center;font-size:13px;color:#333}
+.wc span:last-child:hover{background:#c42b1c;color:#fff}
+.wc span:hover{background:#0001}
+/* command bar */
+.cmd{display:flex;align-items:center;gap:2px;padding:0 10px;background:var(--mica)}
+.cb{display:flex;align-items:center;gap:7px;height:34px;padding:0 10px;border-radius:6px;font-size:13px}
+.cb:hover{background:#0000000f}
+.cb:focus-visible,.crumb:focus-visible,.nav button:focus-visible,.row:focus-visible,.sbtn:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
+.cb .ic{color:var(--acc)}
+.sep{width:1px;height:20px;background:var(--line);margin:0 6px}
+.seg{display:inline-flex;background:var(--mica2);border-radius:6px;padding:2px;margin-left:auto}
+.seg button{padding:5px 12px;border-radius:5px;font-size:13px}
+.seg button[aria-pressed=true]{background:var(--paper);box-shadow:0 1px 2px #0002;font-weight:600}
+/* address */
+.addr{display:flex;align-items:center;gap:8px;padding:0 10px}
+.nb{width:34px;height:34px;border-radius:6px;display:grid;place-items:center;color:#444}
+.nb:hover{background:#0000000f}.nb[disabled]{opacity:.35}
+.bar{flex:1;display:flex;align-items:center;height:34px;background:var(--paper);border:1px solid var(--line);border-bottom-color:#8f94ab;border-radius:6px;padding:0 6px;gap:2px;min-width:0}
+.crumb{padding:3px 8px;border-radius:4px;white-space:nowrap}
+.crumb:hover{background:var(--mica)}
+.bar .ic{color:var(--mute)}
+.ro{margin-left:auto;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--mute);padding-right:6px;white-space:nowrap}
+.ro .ic{color:var(--acc)}
+.find{width:300px;display:flex;align-items:center;gap:8px;height:34px;background:var(--paper);border:1px solid var(--line);border-bottom-color:#8f94ab;border-radius:6px;padding:0 10px}
+.find:focus-within{border-bottom:2px solid var(--acc)}
+.find input{flex:1;border:0;outline:0;background:none;font:inherit;min-width:0}
+/* body */
+.body{display:grid;grid-template-columns:268px 1fr 360px;min-height:0;border-top:1px solid var(--line)}
+.nav{padding:8px 6px;overflow:auto;background:var(--mica)}
+.nav h3{font:600 12px "Segoe UI Variable Text","Segoe UI";color:var(--mute);padding:12px 10px 4px}
+.nav button{display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 10px;border-radius:6px;text-align:left}
+.nav button:hover{background:#0000000d}
+.nav button[aria-current=true]{background:var(--acc-soft);box-shadow:inset 3px 0 0 var(--acc);font-weight:600}
+.nav .n{margin-left:auto;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+.nav .kid{padding-left:26px}
+.dot{width:10px;height:10px;border-radius:3px;flex:none}
+.list{background:var(--paper);display:flex;flex-direction:column;min-width:0;border-left:1px solid var(--line);border-right:1px solid var(--line)}
+.head,.row{display:grid;grid-template-columns:minmax(220px,1fr) 150px 70px 80px 190px;align-items:center;gap:0}
+.head{height:34px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--mute)}
+.head button{height:100%;padding:0 12px;text-align:left;display:flex;align-items:center;gap:6px;border-right:1px solid var(--line)}
+.head button:hover{background:var(--mica)}
+.rows{overflow:auto;flex:1;padding:4px 6px}
+.grp{display:flex;align-items:center;gap:8px;padding:12px 8px 6px;font-size:13px;font-weight:600;color:var(--acc);cursor:pointer;border-bottom:1px solid var(--line);margin:0 2px}
+.grp span{color:var(--mute);font-weight:400}
+.grp .ic{transition:transform .12s}
+.grp.shut .ic{transform:rotate(-90deg)}
+.row{height:38px;border-radius:6px;cursor:default;margin:1px 0}
+.row:hover{background:var(--mica)}
+.row[aria-selected=true]{background:var(--acc-soft)}
+.row>div{padding:0 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:9px;font-variant-numeric:tabular-nums}
+.row .nm .ic{color:var(--acc)}
+.mt{display:flex;align-items:center;gap:8px}
+.mt i{display:block;width:44px;height:5px;background:var(--mica2);border-radius:3px;overflow:hidden}
+.mt i b{display:block;height:100%;background:var(--acc)}
+.chip{font-size:11.5px;padding:2px 7px;border-radius:10px;background:var(--mica2);color:var(--mute)}
+.chip.p{background:#fbe3ec;color:var(--pii)}.chip.g{background:#fbeccf;color:var(--warn)}
+.empty{padding:60px 30px;color:var(--mute);text-align:center}
+b.hit{background:#ffe58a;font-weight:inherit;border-radius:2px}
+/* preview */
+.pv{background:var(--mica);padding:16px 18px;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.pv h2{font:600 18px/1.25 "Segoe UI Variable Display","Segoe UI";display:flex;gap:10px;align-items:flex-start}
+.pv h2 .ic{color:var(--acc);margin-top:2px}
+.page{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:16px 16px 18px;font:13px/1.6 Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 3px #0001}
+mark.pii{border-radius:3px;padding:0 3px;font:inherit}
+mark.pii.r{background:#1b1d2a;color:#fff}
+mark.pii.o{background:#fbe3ec;color:var(--pii)}
+.sum{font-size:13.5px;line-height:1.5}
+.sum small{display:block;color:var(--mute);font-size:12px;margin-bottom:3px}
+dl{display:grid;grid-template-columns:96px 1fr;gap:6px 10px;font-size:13px}
+dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.btns{display:flex;gap:8px}
+.sbtn{height:32px;padding:0 12px;border-radius:6px;background:var(--paper);border:1px solid var(--line);display:flex;align-items:center;gap:7px;font-size:13px}
+.sbtn:hover{background:var(--mica2)}
+.sbtn.p{background:var(--acc);border-color:var(--acc);color:#fff}.sbtn.p:hover{background:#3d41a0}
+/* status */
+.status{display:flex;align-items:center;gap:18px;padding:0 14px;font-size:12.5px;color:var(--mute);background:var(--mica);border-top:1px solid var(--line)}
+.status .r{margin-left:auto;display:flex;gap:16px}
+.prog{width:140px;height:4px;background:var(--mica2);border-radius:2px;overflow:hidden;display:none}.prog b{display:block;height:100%;width:0;background:var(--acc)}
+/* context menu */
+#ctx{position:fixed;z-index:9;min-width:240px;background:#fffffff0;backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 30px #1b1d2a33;padding:4px;display:none}
+#ctx button{display:flex;align-items:center;gap:10px;width:100%;height:32px;padding:0 10px;border-radius:5px;text-align:left}
+#ctx button:hover:not([disabled]){background:var(--acc-soft)}
+#ctx button[disabled]{color:#9a9eb2}
+#ctx hr{border:0;border-top:1px solid var(--line);margin:4px 6px}
+#ctx small{margin-left:auto;color:var(--mute);font-size:12px}
+#toast{position:fixed;left:50%;bottom:44px;transform:translate(-50%,12px);background:var(--ink);color:#fff;padding:9px 16px;border-radius:8px;opacity:0;transition:.2s;pointer-events:none;z-index:10}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+@media (max-width:1100px){.body{grid-template-columns:220px 1fr}.pv{display:none}.find{width:200px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="title">
+    <div class="tab"></div><button class="plus" aria-label="New tab">+</button>
+    <div class="wc"><span>&#8211;</span><span>&#9633;</span><span>&#10005;</span></div>
+  </div>
+  <div class="cmd" id="cmd"></div>
+  <div class="addr">
+    <button class="nb" id="back" aria-label="Back"></button><button class="nb" id="fwd" aria-label="Forward" disabled></button><button class="nb" id="up" aria-label="Up"></button>
+    <div class="bar" id="bar"></div>
+    <label class="find"><span id="fi"></span><input id="q" placeholder="Search your files" aria-label="Search your files" autocomplete="off"></label>
+  </div>
+  <div class="body">
+    <nav class="nav" id="nav" aria-label="Folders"></nav>
+    <section class="list"><div class="head" id="head"></div><div class="rows" id="rows" role="listbox" aria-label="Files"></div></section>
+    <aside class="pv" id="pv" aria-label="Preview"></aside>
+  </div>
+  <div class="status"><span id="count"></span><span id="selinfo"></span><div class="prog" id="prog"><b></b></div><div class="r"><span id="ro"></span><span>AI models: ready</span></div></div>
+</div>
+<div id="ctx" role="menu"></div>
+<script>
+const {S,$,$$,icon,esc,FCOL}=KIT;
+let nav='all',q='',sel=null,red=true,sortK='name',sortD=1,shut={},hist=['all'];
+const NAVS={all:'All files',pii:'Sensitive (personal data)',guess:'Needs a look'};
+const fname=id=>NAVS[id]||S.fById[id].name;
+
+/* chrome */
+$('.tab').innerHTML=icon('tree',16)+'ShadowTree  ·  sample_messy_folder<span class="x">'+icon('x',14)+'</span>';
+$('#back').innerHTML=icon('chevL',18);$('#fwd').innerHTML=icon('chevR',18);$('#up').innerHTML=icon('chevU',18);$('#fi').innerHTML=icon('search',16);
+$('#ro').innerHTML=icon('lock',13)+' Read-only. Nothing is written to your disk.';
+$('#cmd').innerHTML=`<button class="cb" id="newf">${icon('plus')}New folder</button><span class="sep"></span>
+<button class="cb" id="idx">${icon('refresh')}Index (Read-Only)</button><button class="cb" id="pick">${icon('disk')}Choose folder</button><span class="sep"></span>
+<button class="cb" id="sortb">${icon('sort')}Sort</button><button class="cb" id="viewb">${icon('list')}View</button>
+<div class="seg" role="group" aria-label="Text view"><button id="vr" aria-pressed="true">Redacted</button><button id="vo" aria-pressed="false">Original</button></div>`;
+
+function items(){
+  if(q.trim()){const r=KIT.run(q);return {list:r.hits.map(h=>({f:h.f,m:h.match})),weak:r.weak,search:true};}
+  let L;
+  if(nav==='all')L=S.files.map(f=>({f,m:Math.round(S.score(f)*100),g:S.primary(f).id}));
+  else if(nav==='pii')L=S.sensitive().map(f=>({f,m:Math.round(S.score(f)*100),g:S.primary(f).id}));
+  else if(nav==='guess')L=S.files.filter(S.isGuess).map(f=>({f,m:Math.round(S.score(f)*100),g:S.primary(f).id}));
+  else L=S.inFolder(nav).map(f=>({f,m:Math.round(f.links.find(l=>l[0]===nav)[1]*100),g:nav}));
+  return {list:L,weak:0,search:false};
+}
+const SORT={name:(a,b)=>a.f.name.localeCompare(b.f.name),match:(a,b)=>b.m-a.m,kind:(a,b)=>a.f.kind.localeCompare(b.f.kind),size:(a,b)=>a.f.bytes-b.f.bytes};
+function flags(f){let s='';if(KIT.pii(f))s+='<span class="chip p">Personal data</span>';if(S.isGuess(f))s+='<span class="chip g">Best guess</span>';if(f.ai==='fallback')s+='<span class="chip">Basic summary</span>';return s}
+
+function draw(){
+  const it=items();let L=it.list.slice().sort((a,b)=>sortD*SORT[sortK](a,b));
+  if(it.search&&sortK==='name'&&!draw.touched)L=it.list.slice().sort(SORT.match);
+  /* address bar */
+  $('#bar').innerHTML=icon('tree',16)+`<button class="crumb" data-go="all">ShadowTree</button>`+(it.search?`${icon('chevR',14)}<span class="crumb">Search results for “${esc(q)}”</span>`:nav==='all'?'':`${icon('chevR',14)}<button class="crumb">${esc(fname(nav))}</button>`)+`<span class="ro">${icon('shield',14)}Virtual folders</span>`;
+  $('#bar [data-go]').onclick=()=>go('all');
+  /* nav */
+  const cnt=id=>S.inFolder(id).length;
+  $('#nav').innerHTML=`<h3>Quick access</h3>
+   <button data-n="pii">${icon('shield',17)}Sensitive (personal data)<span class="n">${S.sensitive().length}</span></button>
+   <button data-n="guess">${icon('help',17)}Needs a look<span class="n">${S.files.filter(S.isGuess).length}</span></button>
+   <h3>ShadowTree</h3>
+   <button data-n="all">${icon('chevD',14)}${icon('tree',17)}All files<span class="n">${S.files.length}</span></button>
+   ${S.folders.map(f=>`<button class="kid" data-n="${f.id}"><i class="dot" style="background:${FCOL[f.id]}"></i>${esc(f.name)}<span class="n">${cnt(f.id)}</span></button>`).join('')}
+   <h3>On your disk</h3>
+   <button data-disk>${icon('chevR',14)}${icon('disk',17)}sample_messy_folder</button>`;
+  $$('#nav [data-n]').forEach(b=>{b.setAttribute('aria-current',String(!it.search&&b.dataset.n===nav));b.onclick=()=>go(b.dataset.n)});
+  $('#nav [data-disk]').onclick=()=>KIT.toast('Opens the real folder in Windows Explorer. Nothing in it has changed.');
+  /* head */
+  const H=[['name','Name'],['match',it.search?'Match':'Fit'],['kind','Type'],['size','Size']];
+  $('#head').innerHTML=H.map(([k,t])=>`<button data-s="${k}">${t}${sortK===k?icon(sortD>0?'chevU':'chevD',12):''}</button>`).join('')+'<button style="border:0;cursor:default">Notes</button>';
+  $$('#head [data-s]').forEach(b=>b.onclick=()=>{draw.touched=1;sortD=sortK===b.dataset.s?-sortD:1;sortK=b.dataset.s;draw()});
+  /* rows */
+  const rowH=r=>`<div class="row" role="option" tabindex="0" data-id="${r.f.id}" aria-selected="${sel===r.f.id}">
+    <div class="nm">${icon(KIT.kindIcon(r.f),18)}<span>${it.search?KIT.hl(r.f.name,q):esc(r.f.name)}</span></div>
+    <div class="mt"><i><b style="width:${r.m}%"></b></i>${r.m}%</div><div>${S.KIND[r.f.kind]}</div><div>${S.size(r.f.bytes)}</div><div>${flags(r.f)}</div></div>`;
+  let h='';
+  if(!L.length)h=`<div class="empty">${it.search?`Nothing matches “${esc(q)}”.<br>Try describing what the file is about.`:'This folder is empty.'}</div>`;
+  else if(nav==='all'&&!it.search){
+    S.folders.forEach(fo=>{const g=L.filter(r=>r.g===fo.id);if(!g.length)return;const s=shut[fo.id];
+      h+=`<div class="grp ${s?'shut':''}" data-g="${fo.id}">${icon('chevD',14)}${esc(fo.name)} <span>(${g.length})</span></div>`+(s?'':g.map(rowH).join(''))});
+  } else h=L.map(rowH).join('');
+  $('#rows').innerHTML=h;
+  $$('#rows .grp').forEach(g=>g.onclick=()=>{shut[g.dataset.g]=!shut[g.dataset.g];draw()});
+  $$('#rows .row').forEach(r=>{r.onclick=()=>pick(+r.dataset.id);r.ondblclick=()=>pick(+r.dataset.id);r.oncontextmenu=e=>{e.preventDefault();pick(+r.dataset.id);menu(e.clientX,e.clientY)}});
+  $('#count').textContent=L.length+' item'+(L.length===1?'':'s')+(it.weak?`  ·  ${it.weak} weak match${it.weak>1?'es':''} hidden`:'');
+  draw.vis=L.map(r=>r.f.id);
+  preview();
+}
+function pick(id){sel=id;$$('#rows .row').forEach(r=>r.setAttribute('aria-selected',String(+r.dataset.id===id)));preview();const f=S.byId[id];$('#selinfo').textContent='1 item selected  '+S.size(f.bytes)}
+function preview(){
+  const f=sel&&S.byId[sel];const p=$('#pv');
+  if(!f){p.innerHTML='<div class="empty">Select a file to preview it.<br>Its text is shown with personal data covered.</div>';$('#selinfo').textContent='';return}
+  const fo=S.primary(f);
+  p.innerHTML=`<h2>${icon(KIT.kindIcon(f),22)}<span>${esc(f.title)}</span></h2>
+  <div class="sum"><small>What it is</small>${esc(f.summary)}${f.ai==='fallback'?' <span class="chip">Basic summary</span>':''}</div>
+  <div class="page">${KIT.body(f,red,q)}</div>
+  <dl><dt>Filed in</dt><dd>${esc(fo.name)}${S.isGuess(f)?' <span class="chip g">Best guess</span>':''}</dd><dt>Fit</dt><dd>${S.pct(S.score(f))}%</dd>${f.links.length>1?`<dt>Also near</dt><dd>${f.links.slice(1).map(l=>esc(S.fById[l[0]].short)+' '+S.pct(l[1])+'%').join(', ')}</dd>`:''}<dt>On disk</dt><dd>${esc(S.path(f))}</dd><dt>Size</dt><dd>${S.size(f.bytes)}</dd></dl>
+  <div class="tags">${f.tags.map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div>
+  <div class="btns"><button class="sbtn p" id="rv">${icon('open',15)}Reveal on Disk</button><button class="sbtn" id="cp">${icon('copy',15)}Copy path</button></div>`;
+  $('#rv').onclick=()=>KIT.toast('Revealed in Windows Explorer');$('#cp').onclick=()=>KIT.toast('Path copied');
+}
+function go(n){q='';$('#q').value='';nav=n;if(hist[hist.length-1]!==n)hist.push(n);sel=null;draw()}
+function setRed(v){red=v;$('#vr').setAttribute('aria-pressed',v);$('#vo').setAttribute('aria-pressed',!v);preview()}
+$('#vr').onclick=()=>setRed(true);$('#vo').onclick=()=>setRed(false);
+$('#q').oninput=e=>{q=e.target.value;sel=null;draw()};
+$('#back').onclick=()=>{if(hist.length>1){hist.pop();nav=hist[hist.length-1];q='';$('#q').value='';sel=null;draw()}};
+$('#up').onclick=()=>go('all');
+$('#newf').onclick=()=>KIT.toast('Created “New folder”. Sorting your files into it…');
+$('#pick').onclick=()=>KIT.toast('Pick a folder in the window…');
+$('#sortb').onclick=()=>{draw.touched=1;sortK=({name:'match',match:'size',size:'kind',kind:'name'})[sortK];draw()};
+$('#viewb').onclick=()=>KIT.toast('Details view. Icons and tiles are not needed here.');
+$('#idx').onclick=()=>{const p=$('#prog');p.style.display='block';$('#idx').disabled=true;KIT.scan(v=>p.firstChild.style.width=v*100+'%',()=>{p.style.display='none';$('#idx').disabled=false;KIT.toast('Indexed 13 files. Nothing was changed.')})};
+/* context menu */
+function menu(x,y){const c=$('#ctx');c.innerHTML=`<button data-a="Revealed in Windows Explorer">${icon('open',16)}Reveal on Disk</button><button data-a="Path copied">${icon('copy',16)}Copy path</button><button data-a="Redacted text copied">${icon('shield',16)}Copy redacted text</button><hr><button data-a="Moved in ShadowTree only. The file on disk stays where it is.">${icon('folder',16)}Move to folder<small>&#9656;</small></button><hr><button disabled title="ShadowTree never changes your files">${icon('x',16)}Delete<small>Not available</small></button>`;
+  c.style.display='block';c.style.left=Math.min(x,innerWidth-250)+'px';c.style.top=Math.min(y,innerHeight-230)+'px';
+  $$('#ctx [data-a]').forEach(b=>b.onclick=()=>{KIT.toast(b.dataset.a);c.style.display='none'})}
+addEventListener('click',()=>$('#ctx').style.display='none');
+/* keyboard: the same keys as Explorer */
+addEventListener('keydown',e=>{
+  if(e.key==='f'&&e.ctrlKey||e.key==='F3'){e.preventDefault();$('#q').focus();return}
+  if(e.key==='F5'){e.preventDefault();$('#idx').click();return}
+  if(e.key==='Escape'){$('#ctx').style.display='none';if(document.activeElement===$('#q')&&q){q='';$('#q').value='';draw()}}
+  if(document.activeElement===$('#q'))return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const v=draw.vis;if(!v.length)return;let i=v.indexOf(sel);i=e.key==='ArrowDown'?Math.min(v.length-1,i+1):Math.max(0,i<0?0:i-1);pick(v[i]);$(`#rows [data-id="${v[i]}"]`).scrollIntoView({block:'nearest'})}
+  if(e.key==='Backspace'){$('#back').click()}
+});
+draw();pick(1);
+</script>
+</body>
+</html>

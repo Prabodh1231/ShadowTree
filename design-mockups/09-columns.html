@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree 09 · Columns</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Concept: a power tool for people with thousands of files. Miller columns, so the whole
+     path from folder to file to evidence stays on screen: Folders > Files > Why > Text.
+     Keyboard first: arrows move, nothing ever asks for a click. */
+  :root{--bg:#eceaf1;--col:#fff;--col2:#faf9fc;--line:#d8d4e0;--ink:#1e1a26;--mute:#6d6778;--acc:#3b1f5c;--accsoft:#ece4f6;--amber:#a85f00;--pii:#8e1d33;--ok:#2d6b4a}
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font:14px/1.4 "Onest",sans-serif;display:grid;grid-template-rows:auto auto 1fr auto;overflow:hidden}
+  .tb{display:flex;align-items:center;gap:18px;padding:10px 18px;background:var(--col);border-bottom:1px solid var(--line)}
+  .brand{font:700 17px "Onest";letter-spacing:-.02em;color:var(--acc)}
+  .crumb{display:flex;align-items:center;gap:6px;color:var(--mute);font-size:13.5px;min-width:0;flex:1;overflow:hidden;white-space:nowrap}
+  .crumb b{color:var(--ink);font-weight:600}
+  .crumb i{font-style:normal;color:#b3adbe}
+  .tb input{width:280px;font:inherit;border:1px solid var(--line);border-radius:6px;padding:7px 12px;background:var(--col2)}
+  .tb input:focus{outline:2px solid var(--acc);outline-offset:1px}
+  .btn{font:600 13.5px "Onest";background:var(--acc);color:#fff;border:0;border-radius:6px;padding:8px 14px;cursor:pointer}
+  .btn.o{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+  .btn:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  .prog{height:3px;background:var(--line);position:relative}
+  .prog i{position:absolute;left:0;top:0;bottom:0;background:var(--acc);width:0;transition:width .2s}
+  .cols{display:grid;grid-template-columns:230px 330px minmax(300px,1fr) minmax(340px,1.1fr);min-height:0}
+  .c{background:var(--col);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .c:nth-child(even){background:var(--col2)}
+  .c h3{font:600 12px "Onest";color:var(--mute);padding:10px 16px 8px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;position:relative;letter-spacing:.01em}
+  .c.act h3{color:var(--acc)}
+  .c.act h3::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--acc)}
+  .sc{overflow:auto;flex:1;padding:6px 0}
+  .r{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;padding:8px 16px;cursor:pointer}
+  .r:hover{background:#f1edf7}
+  .r[aria-selected=true]{background:var(--accsoft);color:var(--ink)}
+  .c.act .r[aria-selected=true]{background:var(--acc);color:#fff}
+  .c.act .r[aria-selected=true] small,.c.act .r[aria-selected=true] .m{color:#e2d6f3}
+  .r:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
+  .r .tx{flex:1;min-width:0}
+  .r .tx b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .r small{display:block;color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .r .m{font-size:12.5px;color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .k{width:8px;height:8px;border-radius:2px;flex:none}
+  .sep{margin:8px 16px 4px;font-size:11.5px;color:var(--mute);border-top:1px solid var(--line);padding-top:8px}
+  .g{color:var(--amber)!important;font-weight:600}
+  /* detail */
+  .pane{padding:18px 22px 24px;overflow:auto;flex:1}
+  .pane h2{font:700 24px/1.15 "Onest";letter-spacing:-.02em;margin-bottom:8px}
+  .pane p{max-width:52ch;margin:8px 0 14px;font-size:14.5px}
+  .sec{font:600 12px "Onest";color:var(--mute);margin:18px 0 8px}
+  .lk{display:grid;grid-template-columns:150px 1fr 40px;gap:10px;align-items:center;margin:6px 0;font-size:13.5px}
+  .lk .t{height:8px;background:#e8e4ee;border-radius:2px;overflow:hidden}
+  .lk .t i{display:block;height:100%;background:var(--acc)}
+  .lk.gu .t i{background:repeating-linear-gradient(90deg,var(--amber) 0 5px,transparent 5px 8px)}
+  .lk span:last-child{text-align:right;font-variant-numeric:tabular-nums}
+  .tags{display:flex;flex-wrap:wrap;gap:6px}
+  .tags span{background:#efecf4;border-radius:4px;padding:2px 9px;font-size:12.5px}
+  .tags .p{background:var(--pii);color:#fff}
+  dl{display:grid;grid-template-columns:70px 1fr;gap:5px 10px;font-size:13px}
+  dt{color:var(--mute)}dd{word-break:break-all}
+  .mono{font:12.5px "Cascadia Mono",Consolas,monospace}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-bottom:12px}
+  .seg button{all:unset;cursor:pointer;padding:5px 14px;font-weight:600;font-size:13px}
+  .seg button[aria-pressed=true]{background:var(--acc);color:#fff}
+  .seg button:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
+  pre{font:13px/1.65 "Cascadia Mono",Consolas,monospace;background:#fff;border:1px solid var(--line);border-radius:6px;padding:14px;white-space:pre-wrap}
+  .rb{background:var(--ink);color:var(--ink);border-radius:2px}
+  .empty{color:var(--mute);padding:20px 22px}
+  .st{display:flex;gap:22px;padding:7px 18px;background:var(--col);border-top:1px solid var(--line);font-size:12.5px;color:var(--mute);align-items:center}
+  .st .ok{color:var(--ok);font-weight:600}
+  .st .r2{margin-left:auto;display:flex;gap:22px}
+  @media (max-width:1100px){.cols{grid-template-columns:200px 280px 1fr}.cols .c:last-child{display:none}.tb input{width:180px}}
+  @media (max-width:760px){.cols{grid-template-columns:1fr}.cols .c:not(:nth-child(2)){display:none}.crumb{display:none}}
+</style>
+</head>
+<body>
+<div class="tb"><div class="brand">ShadowTree</div>
+  <nav class="crumb" id="crumb" aria-label="Path"></nav>
+  <input id="q" type="search" placeholder="Search by meaning" aria-label="Search files">
+  <button class="btn" id="idx" type="button">Index (read-only)</button></div>
+<div class="prog"><i id="pb"></i></div>
+<div class="cols" id="cols">
+  <section class="c act" data-c="0"><h3><span>Folders</span><span id="n0"></span></h3><div class="sc" id="c0" role="listbox" aria-label="Folders"></div></section>
+  <section class="c" data-c="1"><h3><span id="h1">Files</span><span id="n1"></span></h3><div class="sc" id="c1" role="listbox" aria-label="Files"></div></section>
+  <section class="c" data-c="2"><h3><span>Why it is here</span></h3><div class="pane" id="c2"></div></section>
+  <section class="c" data-c="3"><h3><span>Text from the file</span></h3><div class="pane" id="c3"></div></section>
+</div>
+<div class="st"><span id="s1" class="ok">Index up to date</span><span id="s2">13 files &middot; 10 summarised by AI &middot; 3 basic</span><span class="r2"><span>Models loaded 6 of 6</span><span>Memory 625 MB</span><span>Network: none while running</span></span></div>
+<script src="data.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const COL={fin:'#c2410c',work:'#1d4ed8',personal:'#a21caf',media:'#0f766e',unsorted:'#6b7280',pii:'#8e1d33'};
+const dirs=[...ST.folders.map(f=>({id:f.id,name:f.name,list:ST.inFolder(f.id)})),{id:'pii',name:'Sensitive (PII)',list:ST.sensitive()}];
+let col=0,di=0,fi=0,redacted=true,q='',res=null;
+function files(){return res?res.map(r=>({f:r.f,m:r.match})):dirs[di].list.map(f=>({f,m:null}))}
+function fscore(f,d){const l=f.links.find(x=>x[0]===d.id);return l?l[1]:null}
+function draw(){
+  document.querySelectorAll('.c').forEach((c,i)=>c.classList.toggle('act',i===col||(col===2&&i===1)&&false));
+  document.querySelector(`.c[data-c="${col}"]`).classList.add('act');
+  // col 0
+  $('c0').innerHTML='';
+  dirs.forEach((d,i)=>{if(d.id==='pii'){const s=document.createElement('div');s.className='sep';s.textContent='Smart folder';$('c0').appendChild(s)}
+    const b=document.createElement('button');b.className='r';b.setAttribute('role','option');b.setAttribute('aria-selected',!res&&i===di);
+    b.innerHTML=`<i class="k" style="background:${COL[d.id]}"></i><span class="tx"><b></b></span><span class="m">${d.list.length}</span>`;b.querySelector('b').textContent=d.name;
+    b.onclick=()=>{res=null;q='';$('q').value='';di=i;fi=0;col=0;draw()};b.ondblclick=()=>{col=1;draw()};$('c0').appendChild(b)});
+  $('n0').textContent=dirs.length-1+' + 1';
+  // col 1
+  const L=files();$('h1').textContent=res?'Results for “'+q+'”':dirs[di].name;$('n1').textContent=L.length;
+  $('c1').innerHTML='';
+  if(!L.length)$('c1').innerHTML='<p class="empty">No files here yet. Press Index to read a folder.</p>';
+  L.forEach((x,i)=>{const f=x.f,b=document.createElement('button');b.className='r';b.setAttribute('role','option');b.setAttribute('aria-selected',i===fi);
+    const sc=x.m!=null?x.m+'%':(f.links[0][0]==='unsorted'?'':(fscore(f,dirs[di])!=null?ST.pct(fscore(f,dirs[di]))+'%':ST.pct(ST.score(f))+'%'));
+    const g=!res&&ST.isGuess(f);
+    b.innerHTML=`<span class="tx"><b></b><small></small></span><span class="m ${g?'g':''}">${g?'guess ':''}${sc}</span>`;
+    b.querySelector('b').textContent=f.title;b.querySelector('small').textContent=f.name+(ST.piiList(f).length?'  ·  personal data':'');
+    b.onclick=()=>{fi=i;col=1;draw()};b.ondblclick=()=>{col=3;draw()};$('c1').appendChild(b)});
+  const sel=L[fi];detail(sel&&sel.f);
+  // crumb
+  $('crumb').innerHTML=`<span>Virtual</span><i>›</i><b>${res?'Search':esc(dirs[di].name)}</b>${sel?`<i>›</i><b>${esc(sel.f.title)}</b>`:''}${sel?`<span class="mono" style="margin-left:14px;color:#8d8799;overflow:hidden;text-overflow:ellipsis">${esc(ST.path(sel.f))}</span>`:''}`;
+  const a=$('c1').querySelector('[aria-selected=true]');a&&a.scrollIntoView({block:'nearest'});
+}
+function detail(f){
+  if(!f){$('c2').innerHTML='<p class="empty">Select a file to see why it was filed here.</p>';$('c3').innerHTML='';return}
+  const pii=ST.piiList(f).length;
+  $('c2').innerHTML=`<h2></h2><p></p><div class="sec">Filed in</div>${f.links.map(l=>`<div class="lk${l[1]<.5&&l[0]!=='unsorted'?' gu':''}"><span>${ST.fById[l[0]].name}</span><span class="t"><i style="width:${l[0]==='unsorted'?0:ST.pct(l[1])}%"></i></span><span>${l[0]==='unsorted'?'':ST.pct(l[1])+'%'}</span></div>`).join('')}
+    ${ST.isGuess(f)?'<p style="font-size:13px;color:var(--amber)">Best guess. No folder reached 50%, so this is the closest one.</p>':''}
+    <div class="sec">Topics</div><div class="tags">${f.tags.map(t=>`<span>${esc(t)}</span>`).join('')}${pii?'<span class="p">Personal data: '+ST.piiTypes(f).join(', ').toLowerCase().replace(/_/g,' ')+'</span>':''}</div>
+    <div class="sec">Details</div><dl><dt>Type</dt><dd>${ST.KIND[f.kind]}, ${ST.size(f.bytes)}</dd><dt>Summary</dt><dd>${f.ai==='ok'?'Written by AI on this PC':'Basic summary, AI not used'}</dd><dt>Path</dt><dd class="mono"></dd></dl>
+    <div style="margin-top:16px;display:flex;gap:8px"><button class="btn" type="button">Reveal on disk</button><button class="btn o" type="button">Copy path</button></div>`;
+  $('c2').querySelector('h2').textContent=f.title;
+  $('c2').querySelector('p').textContent=pii&&redacted?'Summary hidden in the redacted view.':f.summary;
+  $('c2').querySelector('.mono').textContent=ST.path(f);
+  const txt=ST.parseText(f.text).map(s=>s.t==='text'?esc(s.v):(redacted?`<span class="rb">${'█'.repeat(Math.max(4,s.v.length))}</span>`:esc(s.v))).join('');
+  $('c3').innerHTML=`${pii?`<div class="seg" role="group" aria-label="View"><button aria-pressed="${redacted}" data-r="1">Redacted</button><button aria-pressed="${!redacted}" data-r="0">Original</button></div>`:''}<pre>${txt}</pre>`;
+  $('c3').querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{redacted=b.dataset.r==='1';draw()});
+}
+addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'){if(e.key==='Escape'){e.target.blur()}if(e.key==='Enter'||e.key==='ArrowDown'){e.target.blur();col=1;draw()}return}
+  const L=files();
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const d=e.key==='ArrowDown'?1:-1;if(col===0&&!res){di=Math.max(0,Math.min(dirs.length-1,di+d));fi=0}else fi=Math.max(0,Math.min(L.length-1,fi+d));draw()}
+  else if(e.key==='ArrowRight'){col=Math.min(3,col+1);draw()}else if(e.key==='ArrowLeft'){col=Math.max(0,col-1);draw()}
+  else if(e.key==='/'){e.preventDefault();$('q').focus()}
+  else if(e.key==='r'||e.key==='R'){redacted=!redacted;draw()}
+});
+$('q').addEventListener('input',e=>{q=e.target.value.trim();res=q?ST.search(q).filter(r=>r.match>=25):null;fi=0;draw()});
+$('idx').onclick=()=>{const n=ST.files.length;let i=0;$('idx').disabled=true;$('s1').className='';
+  const t=setInterval(()=>{i++;$('pb').style.width=(i/n*100)+'%';$('s1').textContent=`Reading ${i} of ${n}: ${ST.files[i-1].name}`;
+    if(i>=n){clearInterval(t);$('s1').textContent='Index up to date. 0 files changed on disk.';$('s1').className='ok';$('idx').disabled=false;setTimeout(()=>$('pb').style.width='0',900)}},170)};
+draw();
+</script>
+</body>
+</html>

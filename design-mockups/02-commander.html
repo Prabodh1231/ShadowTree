@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree 02 · Commander</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+  /* Concept: file managers had a golden age. A dual-pane, keyboard-first commander,
+     where F8 (Delete) is permanently greyed out because ShadowTree never writes. */
+  :root{--bg:#0000a8;--fg:#55ffff;--hi:#ffff55;--sel:#00a8a8;--grey:#a8a8a8;--black:#000;--white:#fff;--red:#ff5555;--green:#55ff55}
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{background:#000;color:var(--fg);font:22px/1.08 "VT323",ui-monospace,monospace;display:flex;flex-direction:column;overflow:hidden}
+  .menu{background:var(--grey);color:#000;display:flex;gap:0;padding:0 4px}
+  .menu span{padding:0 14px}
+  .menu .r{margin-left:auto;color:#000}
+  .panels{flex:1;display:grid;grid-template-columns:34% 1fr;background:var(--bg);min-height:0}
+  .panel{border:3px double var(--fg);margin:6px 3px 6px 6px;display:flex;flex-direction:column;min-height:0;position:relative}
+  .panel + .panel{margin:6px 6px 6px 3px}
+  .panel .title{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--bg);padding:0 8px;color:var(--fg)}
+  .panel.act .title{background:var(--sel);color:#000}
+  .cols{display:grid;padding:0 6px;color:var(--hi);border-bottom:1px solid var(--fg)}
+  .cols.f{grid-template-columns:1fr 70px 62px 54px}
+  .cols.d{grid-template-columns:1fr 80px}
+  .list{flex:1;overflow:auto;padding:0 3px;min-height:0}
+  .row{display:grid;padding:0 3px;cursor:default;white-space:nowrap}
+  .row.f{grid-template-columns:1fr 70px 62px 54px}
+  .row.d{grid-template-columns:1fr 80px}
+  .row span{overflow:hidden;text-overflow:ellipsis}
+  .row span:nth-child(n+2){text-align:right}
+  .row.sel{background:var(--sel);color:#000}
+  .panel:not(.act) .row.sel{background:transparent;outline:1px dotted var(--fg);outline-offset:-1px;color:var(--fg)}
+  .row.dir{color:var(--white)}
+  .row.pii-row{color:#ff9;}
+  .info{border-top:3px double var(--fg);padding:2px 8px 4px;min-height:68px;color:var(--fg)}
+  .info b{color:var(--hi);font-weight:400}
+  .status{display:flex;justify-content:space-between;padding:0 10px;color:var(--green);background:var(--bg);border-top:1px solid #1818d8}
+  .cmd{background:#000;color:var(--grey);display:flex;align-items:center;padding:0 6px;height:26px}
+  .cmd input{flex:1;background:transparent;border:0;color:var(--white);font:inherit;caret-color:var(--white);outline:0;margin-left:4px}
+  .fkeys{display:grid;grid-template-columns:repeat(10,1fr);background:#000}
+  .fkeys button{all:unset;display:flex;cursor:pointer;color:var(--white);padding:0 0}
+  .fkeys button b{background:#000;color:var(--white);font-weight:400;padding:0 4px 0 6px}
+  .fkeys button span{flex:1;background:var(--sel);color:#000;padding:0 6px;white-space:nowrap;overflow:hidden}
+  .fkeys button.off span{background:#6c6c6c;color:#222;text-decoration:line-through}
+  .fkeys button:focus-visible span{outline:2px solid var(--hi)}
+  /* dialog */
+  .dim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:5}
+  .dim.on{display:flex}
+  .dlg{width:min(860px,92vw);background:var(--sel);color:#000;border:3px double #fff;box-shadow:12px 12px 0 rgba(0,0,0,.7);padding:10px 16px 12px;font-size:23px}
+  .dlg h3{font-weight:400;text-align:center;background:#000;color:var(--hi);margin:-10px -16px 10px;padding:0 8px;font-size:inherit}
+  .dlg dl{display:grid;grid-template-columns:110px 1fr;margin-bottom:6px}
+  .dlg dt{color:#003}
+  pre{font:inherit;background:var(--bg);color:var(--white);padding:8px 12px;margin:8px 0;white-space:pre-wrap;border:1px solid #fff;max-height:300px;overflow:auto}
+  .rb{background:#000;color:#000}
+  .rb.show{background:transparent;color:var(--hi)}
+  .btns{display:flex;gap:10px;justify-content:center;margin-top:8px}
+  .btns button{font:inherit;background:var(--grey);border:0;border-right:3px solid #444;border-bottom:3px solid #444;padding:0 14px;cursor:pointer;color:#000}
+  .btns button:focus-visible{outline:2px solid var(--hi)}
+  .toast{position:fixed;left:50%;bottom:68px;transform:translateX(-50%);background:#000;border:2px solid var(--red);color:var(--red);padding:2px 14px;display:none;z-index:6}
+  @media (max-width:800px){body{font-size:18px}.panels{grid-template-columns:1fr}.panels .panel:first-child{display:none}.fkeys button b{display:none}}
+</style>
+</head>
+<body>
+<div class="menu"><span>Left</span><span>Files</span><span>Commands</span><span>Search</span><span>Right</span><span class="r">ShadowTree  READ-ONLY  disk writes: 0</span></div>
+<div class="panels">
+  <section class="panel act" id="pl"><div class="title" id="tl">Virtual folders</div>
+    <div class="cols d"><span>Name</span><span>Files</span></div><div class="list" id="ll"></div>
+    <div class="info" id="il"></div></section>
+  <section class="panel" id="pr"><div class="title" id="tr"></div>
+    <div class="cols f"><span>Name</span><span>Size</span><span>Match</span><span>Flags</span></div><div class="list" id="lr"></div>
+    <div class="info" id="ir"></div></section>
+</div>
+<div class="status"><span id="st">13 files indexed on this PC   AI ok 10   basic 3</span><span>Flags: P personal data   ? best guess   F basic summary</span></div>
+<label class="cmd">C:\Demo\sample_messy_folder&gt;<input id="cmd" placeholder="type to search, Enter to run" autocomplete="off" aria-label="Search command line"></label>
+<nav class="fkeys" id="fk"></nav>
+
+<div class="dim" id="dim"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dt">
+  <h3 id="dt"></h3><div id="dbody"></div>
+  <div class="btns"><button id="b4">F4 Redacted/Original</button><button id="b5">F5 Reveal</button><button id="bx">Esc Close</button></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="data.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const dirs=[...ST.folders.map(f=>({id:f.id,name:f.name,files:ST.inFolder(f.id)})),{id:'pii',name:'Sensitive (PII)',files:ST.sensitive(),smart:true}];
+let pane='l', li=0, ri=0, folder=dirs[0], listing=[], redacted=true, viewing=null, mode='folder';
+const pad=(s,n)=>s;
+function flags(f){return (ST.piiList(f).length?'P':'')+(ST.isGuess(f)?'?':'')+(f.ai!=='ok'?'F':'')}
+function renderLeft(){
+  $('ll').innerHTML='';
+  dirs.forEach((d,i)=>{const r=document.createElement('div');r.className='row d dir'+(i===li?' sel':'');
+    r.innerHTML=`<span>${d.smart?'*':'\u25B8'}${d.name}</span><span>${d.files.length}</span>`;
+    r.onclick=()=>{pane='l';li=i;pick();render()};r.ondblclick=()=>{pane='r';render()};$('ll').appendChild(r)});
+}
+function pick(){folder=dirs[li];mode='folder';listing=folder.files.map(f=>({f}));ri=0}
+function renderRight(){
+  $('tr').textContent = mode==='search'?'Search: '+$('cmd').value:folder.name;
+  $('lr').innerHTML='';
+  if(!listing.length){$('lr').innerHTML='<div class="row" style="color:var(--hi)">  (no files)</div>'}
+  listing.forEach((x,i)=>{const f=x.f;const r=document.createElement('div');r.className='row f'+(i===ri?' sel':'')+(ST.piiList(f).length?' pii-row':'');
+    const m=x.match!=null?x.match+'%':(f.links[0][0]==='unsorted'?'  -':ST.pct(ST.score(f))+'%');
+    r.innerHTML=`<span></span><span>${ST.size(f.bytes)}</span><span>${m}</span><span>${flags(f)}</span>`;
+    r.firstChild.textContent=f.name; r.onclick=()=>{pane='r';ri=i;render()}; r.ondblclick=()=>view(f); $('lr').appendChild(r)});
+  const sel=$('lr').querySelector('.sel'); sel&&sel.scrollIntoView({block:'nearest'});
+}
+function renderInfo(){
+  const d=dirs[li]; $('il').innerHTML=`<b>${d.name}</b><br>${d.smart?'Smart folder: files with personal data. Computed on this PC.':(ST.fById[d.id].blurb)}`;
+  const x=listing[ri]; if(!x){$('ir').innerHTML='';return}
+  const f=x.f; $('ir').innerHTML=`<b>${f.title}</b>  ${ST.piiList(f).length?'<span style="color:var(--red)">[personal data]</span>':''}<br>${f.summary.slice(0,150)}${f.summary.length>150?'...':''}`;
+}
+function render(){
+  $('pl').classList.toggle('act',pane==='l');$('pr').classList.toggle('act',pane==='r');
+  $('tl').textContent='Virtual folders';renderLeft();renderRight();renderInfo();
+}
+function body(f){
+  let n={};
+  return ST.parseText(f.text).map(s=>{
+    if(s.t==='text')return esc(s.v);
+    n[s.type]=(n[s.type]||0)+1;
+    return redacted?`<span class="rb">${'\u2588'.repeat(Math.max(4,s.v.length))}</span>`:`<span class="rb show">${esc(s.v)}</span>`;
+  }).join('');
+}
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function view(f){
+  viewing=f;$('dt').textContent=' '+f.name+' ';
+  $('dbody').innerHTML=`<dl><dt>Title</dt><dd>${esc(f.title)}</dd><dt>Folder</dt><dd>${ST.primary(f).name} ${ST.isGuess(f)?'(best guess '+ST.pct(ST.score(f))+'%)':f.links[0][0]==='unsorted'?'':ST.pct(ST.score(f))+'%'}</dd><dt>On disk</dt><dd>${esc(ST.path(f))}</dd><dt>View</dt><dd>${redacted?'REDACTED (personal data hidden)':'ORIGINAL'}</dd></dl><pre>${body(f)}</pre>`;
+  $('dim').classList.add('on');$('bx').focus();
+}
+function closeView(){viewing=null;$('dim').classList.remove('on')}
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)}
+const FK=[['1','Help',()=>toast('Arrows move, Tab switches panel, Enter opens, type to search')],['2','Index',()=>toast('Index (read-only): 13 files read, 0 written')],['3','View',()=>listing[ri]&&view(listing[ri].f)],['4','Redact',()=>{redacted=!redacted;viewing?view(viewing):toast('View: '+(redacted?'Redacted':'Original'))}],['5','Reveal',()=>listing[ri]&&toast('explorer /select,"'+ST.path(listing[ri].f)+'"')],['6','NewDir',()=>toast('New virtual folder: files re-sorted by meaning, none moved')],['7','Search',()=>$('cmd').focus()],['8','Delete',()=>toast('Disabled. ShadowTree never changes your folder.'),true],['9','Models',()=>toast('All models run on this PC. Network: model downloads only')],['10','Quit',()=>toast('Closing the window stops the backend')]];
+FK.forEach(([k,l,fn,off])=>{const b=document.createElement('button');if(off)b.className='off';b.innerHTML=`<b>${k}</b><span>${l}</span>`;b.onclick=fn;$('fk').appendChild(b)});
+$('b4').onclick=()=>FK[3][2]();$('b5').onclick=()=>FK[4][2]();$('bx').onclick=closeView;
+$('cmd').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){const q=e.target.value.trim();if(q){mode='search';listing=ST.search(q).filter(r=>r.match>=25);ri=0;pane='r';render();e.target.blur()}}
+  if(e.key==='Escape'){e.target.value='';e.target.blur();pick();render()}
+});
+addEventListener('keydown',e=>{
+  if(e.target===$('cmd'))return;
+  if(/^F\d+$/.test(e.key)){e.preventDefault();const k=+e.key.slice(1);FK[k-1]&&FK[k-1][2]();return}
+  if(e.key==='Escape'){closeView();return}
+  if(viewing)return;
+  if(e.key==='Tab'){e.preventDefault();pane=pane==='l'?'r':'l';render()}
+  else if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const d=e.key==='ArrowDown'?1:-1;
+    if(pane==='l'){li=Math.max(0,Math.min(dirs.length-1,li+d));pick()}else ri=Math.max(0,Math.min(listing.length-1,ri+d));render()}
+  else if(e.key==='Enter'){if(pane==='l'){pane='r';render()}else listing[ri]&&view(listing[ri].f)}
+  else if(e.key.length===1&&!e.ctrlKey&&!e.metaKey){$('cmd').focus()}
+});
+pick();render();
+</script>
+</body>
+</html>

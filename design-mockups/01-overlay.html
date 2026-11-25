@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree 01 · Overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+  /* Concept: the virtual layer is a sheet of tracing vellum laid over the real disk.
+     Pencil strings run from each real file to where the layer files it. */
+  :root{
+    --desk:#C9CFD4; --disk:#E4E7EA; --disk-ink:#4A5259; --disk-line:#CBD0D4;
+    --vellum:#F6F9FA; --ink:#1D2530; --pencil:#2B4C9B; --pencil-soft:rgba(43,76,155,.28);
+    --muted:#6C7782; --guess:#9A6B12; --pii:#7A1F2B;
+    --mono: "Cascadia Mono","JetBrains Mono",Consolas,ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font:15px/1.45 "Schibsted Grotesk",system-ui,sans-serif;color:var(--ink);background:var(--desk);min-height:100vh}
+  header{display:flex;align-items:center;gap:24px;padding:18px 32px;border-bottom:1px solid rgba(0,0,0,.12)}
+  .brand{font-weight:800;font-size:22px;letter-spacing:-.02em}
+  .brand i{display:inline-block;width:14px;height:14px;border:2px solid var(--ink);border-radius:50%;margin-right:8px;position:relative;top:1px;box-shadow:5px 4px 0 -1px rgba(29,37,48,.35)}
+  .search{flex:1;max-width:520px;position:relative}
+  .search input{width:100%;font:inherit;padding:10px 14px;border:1px solid #9AA3AB;background:rgba(255,255,255,.7);border-radius:4px}
+  .search input:focus{outline:2px solid var(--pencil);outline-offset:1px}
+  .btn{font:600 14px "Schibsted Grotesk";padding:10px 16px;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:4px;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--ink)}
+  .btn:focus-visible{outline:2px solid var(--pencil);outline-offset:2px}
+  .verified{margin-left:auto;font-size:13px;color:var(--disk-ink);display:flex;gap:8px;align-items:center}
+  .verified b{font-family:var(--mono);font-weight:500;background:#fff;border:1px solid var(--disk-line);padding:2px 8px;border-radius:3px}
+
+  main{position:relative;display:grid;grid-template-columns:minmax(300px,360px) minmax(120px,1fr) minmax(480px,760px);gap:0;padding:28px 32px 60px;max-width:1500px;margin:0 auto}
+  .col h2{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 12px;display:flex;align-items:center;gap:8px;height:20px}
+  svg.strings{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+
+  /* real disk */
+  .disk{background:var(--disk);border:1px solid var(--disk-line);box-shadow:inset 0 0 0 4px var(--disk);border-radius:2px}
+  .drow{display:grid;grid-template-columns:1fr auto;gap:10px;padding:9px 14px;font:13px var(--mono);color:var(--disk-ink);border-bottom:1px solid var(--disk-line);transition:background .15s}
+  .drow:last-child{border-bottom:0}
+  .drow span:last-child{color:#8A939B}
+  .drow.on{background:#fff;color:var(--ink)}
+  .drow.dim{opacity:.4}
+  .lock{font-size:12px;color:var(--disk-ink)}
+
+  /* virtual layer */
+  .layer{position:relative;background:var(--vellum);border:1px solid #fff;outline:1px solid var(--pencil-soft);border-radius:2px;padding:6px 0 10px;
+    background-image:linear-gradient(var(--pencil-soft) 1px,transparent 1px);background-size:100% 36px;background-position:0 -1px;background-blend-mode:multiply;
+    box-shadow:0 14px 30px -18px rgba(29,37,48,.5)}
+  .group{padding:6px 18px 4px}
+  .gname{display:flex;align-items:baseline;gap:10px;padding:14px 0 6px;font-weight:800;font-size:17px;letter-spacing:-.01em}
+  .gname small{font-weight:500;font-size:13px;color:var(--muted)}
+  .vrow{position:relative;border-top:1px dashed var(--pencil-soft);transition:opacity .15s,background .15s}
+  .vrow button{all:unset;box-sizing:border-box;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;width:100%;padding:9px 6px;cursor:pointer}
+  .vrow button:focus-visible{outline:2px solid var(--pencil);outline-offset:-2px}
+  .vrow:hover,.vrow.on{background:rgba(255,255,255,.85)}
+  .vrow.dim{opacity:.28}
+  .t{font-weight:600}
+  .tags{color:var(--muted);font-size:13px;margin-left:8px}
+  .meta{display:flex;gap:8px;align-items:center;font-size:13px}
+  .score{font-variant-numeric:tabular-nums;font-weight:600;min-width:38px;text-align:right}
+  .guess{border:1px dashed var(--guess);color:var(--guess);padding:0 7px;border-radius:99px;font-size:12px;font-weight:500}
+  .pii{display:inline-block;width:26px;height:9px;background:var(--pii);border-radius:1px}
+  .detail{display:none;padding:2px 6px 14px;font-size:14px}
+  .vrow.on .detail{display:block}
+  .detail p{max-width:60ch;margin-bottom:8px}
+  .detail code{font:12px var(--mono);background:#fff;border:1px solid var(--disk-line);padding:3px 7px;border-radius:3px;display:inline-block;margin-right:8px}
+  .detail .acts{display:flex;gap:8px;align-items:center;margin-top:6px}
+  .btn.sm{padding:5px 10px;font-size:13px}
+  .anchor{position:absolute;left:-1px;top:50%;width:9px;height:9px;margin-top:-4.5px;border-radius:50%;background:var(--vellum);border:2px solid var(--pencil);transform:translateX(-50%)}
+  .empty{padding:30px 18px;color:var(--muted)}
+  footer{max-width:1500px;margin:0 auto;padding:0 32px 40px;color:#4A5259;font-size:13px}
+  @media (max-width:980px){main{grid-template-columns:1fr}.col.gutter{display:none}svg.strings{display:none}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><i></i>ShadowTree</div>
+  <label class="search"><input id="q" type="search" placeholder="Search by meaning, e.g. pay the bill" aria-label="Search files"></label>
+  <button class="btn" type="button">Index (read-only)</button>
+  <button class="btn ghost" id="toggle" type="button" aria-pressed="true">Strings on</button>
+  <div class="verified">Disk check <b>13 files, 0 written</b></div>
+</header>
+
+<main id="stage">
+  <svg class="strings" id="svg" aria-hidden="true"></svg>
+  <section class="col" aria-label="Files on disk">
+    <h2><span class="lock">&#128274;</span> On your disk, opened read-only</h2>
+    <div class="disk" id="disk"></div>
+  </section>
+  <div class="col gutter"></div>
+  <section class="col" aria-label="Virtual folders">
+    <h2>Virtual layer, nothing here exists on disk</h2>
+    <div class="layer" id="layer"></div>
+  </section>
+</main>
+<footer>Hover or select a file. The string shows where the real file is filed in the virtual layer. Dashed chips are best guesses under 50%.</footer>
+
+<script src="data.js"></script>
+<script>
+const {files, folders} = ST;
+const disk = document.getElementById('disk'), layer = document.getElementById('layer'), svg = document.getElementById('svg'), stage = document.getElementById('stage');
+let stringsOn = true, hot = null, query = '';
+const mtime = id => `Nov ${(id*2)%26+2}`;
+
+[...files].sort((a,b)=>a.name.localeCompare(b.name,'en',{sensitivity:'base'})).forEach(f=>{
+  const r = document.createElement('div'); r.className='drow'; r.dataset.id=f.id;
+  r.innerHTML = `<span></span><span>${ST.size(f.bytes)}</span>`; r.firstChild.textContent=f.name;
+  r.addEventListener('mouseenter',()=>setHot(f.id)); r.addEventListener('mouseleave',()=>setHot(null));
+  disk.appendChild(r);
+});
+
+folders.forEach(fo=>{
+  const list = files.filter(f=>f.links[0][0]===fo.id).sort((a,b)=>b.links[0][1]-a.links[0][1]);
+  if(!list.length) return;
+  const g = document.createElement('div'); g.className='group';
+  g.innerHTML = `<div class="gname">${fo.name}<small>${list.length} ${list.length===1?'file':'files'}</small></div>`;
+  list.forEach(f=>{
+    const row = document.createElement('div'); row.className='vrow'; row.dataset.id=f.id;
+    const piiBar = ST.piiList(f).length ? '<span class="pii" title="Contains personal data"></span>' : '';
+    const sc = ST.score(f);
+    row.innerHTML = `<span class="anchor"></span><button type="button" aria-expanded="false">
+      <span><span class="t"></span><span class="tags"></span></span>
+      <span class="meta">${piiBar}${ST.isGuess(f)?'<span class="guess">Best guess</span>':''}<span class="score">${fo.id==='unsorted'?'':ST.pct(sc)+'%'}</span></span></button>
+      <div class="detail"><p></p><div><code></code></div><div class="acts"><button class="btn sm" type="button">Reveal on disk</button><span style="color:var(--muted);font-size:13px">${f.ai==='ok'?'Summarised on this PC':'Basic summary, AI not used'}</span></div></div>`;
+    row.querySelector('.t').textContent=f.title;
+    row.querySelector('.tags').textContent=f.tags.slice(0,2).join(', ');
+    row.querySelector('.detail p').textContent=f.summary;
+    row.querySelector('code').textContent=ST.path(f);
+    row.querySelector('button').addEventListener('click',e=>{
+      if(e.target.closest('.detail')) return;
+      const open=!row.classList.contains('on');
+      document.querySelectorAll('.vrow.on').forEach(x=>{x.classList.remove('on');x.querySelector('button').setAttribute('aria-expanded','false')});
+      if(open){row.classList.add('on');row.querySelector('button').setAttribute('aria-expanded','true')}
+      draw();
+    });
+    row.addEventListener('mouseenter',()=>setHot(f.id)); row.addEventListener('mouseleave',()=>setHot(null));
+    g.appendChild(row);
+  });
+  layer.appendChild(g);
+});
+
+function setHot(id){hot=id;draw()}
+function matchIds(){
+  if(!query.trim()) return null;
+  return new Set(ST.search(query).filter(r=>r.match>=25).map(r=>r.f.id));
+}
+function draw(){
+  const ids = matchIds();
+  document.querySelectorAll('.vrow').forEach(r=>r.classList.toggle('dim', !!ids && !ids.has(+r.dataset.id)));
+  document.querySelectorAll('.drow').forEach(r=>{r.classList.toggle('dim', !!ids && !ids.has(+r.dataset.id)); r.classList.toggle('on', hot===+r.dataset.id)});
+  svg.innerHTML=''; if(!stringsOn) return;
+  const s = stage.getBoundingClientRect(); svg.setAttribute('viewBox',`0 0 ${s.width} ${s.height}`);
+  files.forEach(f=>{
+    const d = disk.querySelector(`[data-id="${f.id}"]`), v = layer.querySelector(`[data-id="${f.id}"] .anchor`);
+    if(!d||!v) return;
+    const a = d.getBoundingClientRect(), b = v.getBoundingClientRect();
+    const x1 = a.right - s.left, y1 = a.top + a.height/2 - s.top, x2 = b.left + b.width/2 - s.left, y2 = b.top + b.height/2 - s.top;
+    const mx = (x1+x2)/2;
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`);
+    p.setAttribute('fill','none');
+    const isHot = hot===f.id || layer.querySelector(`.vrow.on[data-id="${f.id}"]`);
+    const dimmed = ids && !ids.has(f.id);
+    p.setAttribute('stroke',getComputedStyle(document.documentElement).getPropertyValue('--pencil'));
+    p.setAttribute('stroke-opacity', dimmed ? .05 : isHot ? .95 : .3);
+    p.setAttribute('stroke-width', isHot ? 2 : 1.1);
+    if(ST.isGuess(f)) p.setAttribute('stroke-dasharray','5 4');
+    svg.appendChild(p);
+  });
+}
+document.getElementById('q').addEventListener('input',e=>{query=e.target.value;draw()});
+document.getElementById('toggle').addEventListener('click',e=>{stringsOn=!stringsOn;e.target.setAttribute('aria-pressed',stringsOn);e.target.textContent=stringsOn?'Strings on':'Strings off';draw()});
+new ResizeObserver(draw).observe(stage); addEventListener('resize',draw);
+document.fonts && document.fonts.ready.then(draw);
+draw();
+</script>
+</body>
+</html>

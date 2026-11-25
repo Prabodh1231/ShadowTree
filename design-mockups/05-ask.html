@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree 05 · Ask</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Concept: search is the whole product. One enormous question on a field of deep blue,
+     and a white sheet of answers that rises beneath it. Browsing is the sheet's resting state. */
+  :root{--blue:#1431c9;--blue2:#0f259b;--paper:#fbfbf8;--ink:#14172b;--mute:#5c6078;--mark:#ffe14d;--line:#dfe0e8;--warn:#a05a00}
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{background:var(--blue);color:#fff;font:16px/1.45 "Instrument Sans",sans-serif;overflow:hidden}
+  .top{display:flex;align-items:center;padding:22px 44px;gap:24px}
+  .brand{font:600 18px "Instrument Sans";letter-spacing:-.01em}
+  .top .r{margin-left:auto;display:flex;gap:26px;font-size:14px;color:#c9d0ff}
+  .top button{all:unset;cursor:pointer;color:#fff;text-decoration:underline;text-underline-offset:4px}
+  .top button:focus-visible{outline:2px solid #fff;outline-offset:4px}
+  .hero{padding:8px 44px 0;height:calc(46vh - 64px);display:flex;flex-direction:column;justify-content:center}
+  .field{position:relative;max-width:1180px}
+  .field input{width:100%;background:transparent;border:0;border-bottom:4px solid #fff;color:#fff;font:400 clamp(44px,7vw,104px)/1.05 "Young Serif",serif;padding:0 0 8px;caret-color:var(--mark);letter-spacing:-.01em}
+  .field input:focus{outline:0;border-bottom-color:var(--mark)}
+  .ph{position:absolute;left:0;top:0;font:400 clamp(44px,7vw,104px)/1.05 "Young Serif",serif;color:rgba(255,255,255,.38);pointer-events:none;letter-spacing:-.01em;white-space:nowrap}
+  .ph::after{content:"";display:inline-block;width:4px;height:.8em;background:rgba(255,255,255,.5);margin-left:6px;vertical-align:-.05em;animation:b 1s steps(2) infinite}
+  @keyframes b{50%{opacity:0}}
+  .try{display:flex;gap:10px;align-items:center;margin-top:20px;flex-wrap:wrap;color:#c9d0ff;font-size:14px}
+  .try button{all:unset;cursor:pointer;border:1.5px solid rgba(255,255,255,.55);border-radius:99px;padding:4px 14px;color:#fff;font-size:14px}
+  .try button:hover{background:#fff;color:var(--blue)}
+  .try button:focus-visible{outline:2px solid var(--mark);outline-offset:2px}
+  .sheet{position:fixed;left:0;right:0;top:46vh;bottom:0;background:var(--paper);color:var(--ink);border-radius:28px 28px 0 0;padding:0 44px;overflow:auto;box-shadow:0 -10px 0 var(--blue2)}
+  .inner{max-width:1180px;margin:0 auto;padding:26px 0 60px}
+  .sum{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;color:var(--mute);font-size:14px}
+  .sum b{font:400 26px "Young Serif";color:var(--ink)}
+  /* browse */
+  .shelf{display:grid;grid-template-columns:repeat(4,1fr);gap:36px;margin-top:20px}
+  .shelf h3{font:400 20px "Young Serif";margin-bottom:10px;display:flex;justify-content:space-between;align-items:baseline}
+  .shelf h3 small{font:500 13px "Instrument Sans";color:var(--mute)}
+  .shelf ul{list-style:none;padding:0}
+  .shelf li button{all:unset;display:block;width:100%;cursor:pointer;padding:7px 0;border-top:1px solid var(--line);font-size:15px}
+  .shelf li button:hover{color:var(--blue)}
+  .shelf li button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .shelf li span{color:var(--mute);font-size:13px;margin-left:6px}
+  .shelf .un{grid-column:1/-1;margin-top:-6px}
+  /* results */
+  .res{list-style:none;padding:0;margin-top:14px}
+  .item{border-top:1px solid var(--line)}
+  .item>button{all:unset;box-sizing:border-box;display:grid;grid-template-columns:150px 1fr auto;gap:26px;width:100%;padding:18px 0;cursor:pointer;align-items:start}
+  .item>button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+  .m{padding-top:6px}
+  .m .n{font:400 32px/1 "Young Serif";font-variant-numeric:tabular-nums}
+  .m .bar{height:6px;background:var(--line);margin-top:8px;border-radius:3px;overflow:hidden}
+  .m .bar i{display:block;height:100%;background:var(--blue)}
+  .item h4{font:400 24px/1.15 "Young Serif";margin-bottom:5px}
+  .item p{max-width:62ch;color:#33374d}
+  mark{background:var(--mark);color:var(--ink);padding:0 2px;border-radius:2px}
+  .side{text-align:right;font-size:13px;color:var(--mute);display:flex;flex-direction:column;gap:4px;align-items:flex-end;padding-top:6px}
+  .tag{border:1.5px solid var(--ink);border-radius:99px;padding:1px 10px;color:var(--ink);font-size:13px}
+  .tag.g{border-style:dashed;border-color:var(--warn);color:var(--warn)}
+  .tag.p{background:var(--ink);color:#fff}
+  .why{display:none;padding:0 0 22px 176px;max-width:880px}
+  .item.on .why{display:block}
+  .why .st{display:flex;height:22px;border-radius:3px;overflow:hidden;font-size:12px;color:#fff;margin:6px 0 8px}
+  .why .st span{display:flex;align-items:center;padding-left:8px;white-space:nowrap;overflow:hidden}
+  .why code{font:12.5px "Cascadia Mono",Consolas,monospace;color:var(--mute);word-break:break-all}
+  .why .act{margin-top:10px;display:flex;gap:10px}
+  .why .act button{all:unset;cursor:pointer;border:1.5px solid var(--ink);padding:5px 12px;border-radius:6px;font-size:14px}
+  .why .act button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .weak{margin:26px 0 0;color:var(--mute);font-size:14px;border-top:1px solid var(--line);padding-top:14px}
+  .empty{padding:50px 0;max-width:46ch}
+  .empty b{font:400 28px "Young Serif";display:block;margin-bottom:8px}
+  @media (max-width:900px){.shelf{grid-template-columns:1fr 1fr}.item>button{grid-template-columns:90px 1fr}.side{display:none}.why{padding-left:0}.top,.hero,.sheet{padding-left:20px;padding-right:20px}.top .r span{display:none}}
+  @media (prefers-reduced-motion:reduce){.ph::after{animation:none}}
+</style>
+</head>
+<body>
+<div class="top"><div class="brand">ShadowTree</div><div class="r"><span>Everything stays on this PC</span><button type="button">Index a folder</button></div></div>
+<div class="hero">
+  <div class="field"><span class="ph" id="ph" aria-hidden="true"></span><input id="q" type="search" autocomplete="off" aria-label="Ask your files in plain words"></div>
+  <div class="try" id="try"><span>Try</span></div>
+</div>
+<div class="sheet" id="sheet"><div class="inner" id="inner"></div></div>
+<script src="data.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+['invoice','pay the bill','my diary','meeting','money I spent'].forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>{$('q').value=t;$('q').focus();render()};$('try').appendChild(b)});
+// typed placeholder
+const lines=['pay the bill','my diary','invoice','what did I spend on rent','meeting notes'];let li=0,ci=0,del=false;
+function tick(){
+  if($('q').value){$('ph').style.display='none';setTimeout(tick,400);return}
+  $('ph').style.display='';const w=lines[li];
+  $('ph').textContent=w.slice(0,ci);
+  if(!del&&ci<w.length){ci++;setTimeout(tick,85)}else if(!del){del=true;setTimeout(tick,1400)}
+  else if(ci>0){ci--;setTimeout(tick,35)}else{del=false;li=(li+1)%lines.length;setTimeout(tick,350)}
+}
+if(matchMedia('(prefers-reduced-motion:reduce)').matches){$('ph').textContent=lines[0]}else tick();
+function hl(text,q){
+  let s=esc(text);const ws=q.toLowerCase().split(/\s+/).filter(w=>w.length>3);
+  ws.forEach(w=>{const stem=w.length>4?w.slice(0,w.length-1):w;s=s.replace(new RegExp('('+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\w*)','ig'),'<mark>$1</mark>')});return s;
+}
+let openId=null;
+function render(){
+  const q=$('q').value.trim(),inner=$('inner');
+  if(!q){
+    const cols=ST.folders.filter(f=>f.id!=='unsorted').map(fo=>{const l=ST.files.filter(f=>f.links[0][0]===fo.id);
+      return `<section><h3>${fo.name}<small>${l.length}</small></h3><ul>${l.map(f=>`<li><button data-q="${esc(f.title)}">${esc(f.title)}${ST.isGuess(f)?'<span>best guess</span>':''}</button></li>`).join('')}</ul></section>`}).join('');
+    const un=ST.files.filter(f=>f.links[0][0]==='unsorted');
+    inner.innerHTML=`<div class="sum"><b>${ST.files.length} files, sorted by meaning</b><span>${ST.sensitive().length} hold personal data. Nothing moved on disk.</span></div><div class="shelf">${cols}</div><div class="shelf"><section class="un"><h3>Unsorted<small>${un.length}</small></h3><ul>${un.map(f=>`<li><button data-q="${esc(f.title)}">${esc(f.title)}<span>${esc(f.name)}</span></button></li>`).join('')}</ul></section></div>`;
+    inner.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('q').value=b.dataset.q;render()});
+    return;
+  }
+  const all=ST.search(q),good=all.filter(r=>r.match>=25),weak=all.filter(r=>r.match<25);
+  if(!good.length){inner.innerHTML=`<div class="empty"><b>Nothing matches yet</b>Try the words you would say out loud, like \u201Cpay the bill\u201D. Search reads meaning, not only file names.</div>`;return}
+  inner.innerHTML=`<div class="sum"><b>${good.length} ${good.length===1?'file':'files'} for \u201C${esc(q)}\u201D</b><span>Ranked on this PC in a few milliseconds</span></div><ol class="res" id="res"></ol>${weak.length?`<p class="weak">${weak.length} weak ${weak.length===1?'match':'matches'} hidden: ${weak.map(r=>esc(r.f.title)).join(', ')}.</p>`:''}`;
+  good.forEach(({f,match})=>{
+    const li=document.createElement('li');li.className='item'+(openId===f.id?' on':'');
+    const fo=ST.primary(f),a=Math.round(match*.6),b=Math.round(match*.3),c=match-a-b;
+    li.innerHTML=`<button type="button" aria-expanded="${openId===f.id}"><div class="m"><div class="n">${match}%</div><div class="bar"><i style="width:${match}%"></i></div></div>
+      <div><h4>${hl(f.title,q)}</h4><p>${hl(f.summary,q)}</p></div>
+      <div class="side"><span class="tag${ST.isGuess(f)?' g':''}">${esc(fo.name)}${ST.isGuess(f)?', best guess':''}</span>${ST.piiList(f).length?'<span class="tag p">Personal data</span>':''}<span>${esc(f.name)}</span></div></button>
+      <div class="why"><div style="font-size:13px;color:var(--mute)">How this score was made</div>
+      <div class="st"><span style="background:#1431c9;width:${a/match*100}%">Reranker ${a}</span><span style="background:#4f67e8;width:${b/match*100}%">Meaning ${b}</span><span style="background:#8a98ec;width:${Math.max(c,0)/match*100}%">${c>3?'Words '+c:''}</span></div>
+      <code>${esc(ST.path(f))}</code><div class="act"><button type="button">Reveal on disk</button><button type="button">Copy path</button></div></div>`;
+    li.querySelector('.item>button').onclick=()=>{openId=openId===f.id?null:f.id;render()};
+    $('res').appendChild(li);
+  });
+}
+$('q').addEventListener('input',()=>{openId=null;render()});
+render();
+</script>
+</body>
+</html>

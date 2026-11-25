@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShadowTree 04 · Mosaic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+<style>
+  /* Concept: your whole folder as one picture. A treemap in primary-colour blocks:
+     area is file size, colour is the virtual folder, hatching marks personal data. */
+  :root{--red:#e23a2c;--blue:#1c4bb5;--yellow:#f3b61f;--white:#f2f1ec;--grey:#b9b8b2;--ink:#0d0d0d}
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{background:var(--ink);color:var(--ink);font:500 15px/1.25 "Archivo",sans-serif;display:flex;flex-direction:column;overflow:hidden}
+  .bar{display:flex;gap:6px;height:64px;flex:none}
+  .bar > *{display:flex;align-items:center}
+  .logo{background:var(--ink);color:#fff;padding:0 22px;font:900 30px "Archivo";font-stretch:62%;letter-spacing:.01em;border-right:6px solid var(--ink)}
+  .logo i{width:18px;height:18px;background:var(--red);margin-right:10px;display:inline-block;box-shadow:7px 6px 0 var(--blue)}
+  .sbox{flex:1;background:var(--white);padding:0 18px;margin:6px 0 6px}
+  .sbox input{width:100%;font:700 24px "Archivo";font-stretch:80%;border:0;background:transparent;color:var(--ink)}
+  .sbox input:focus{outline:0}
+  .sbox:focus-within{outline:4px solid var(--yellow);outline-offset:-4px}
+  .seg{background:var(--white);margin:6px 0;display:flex;padding:0}
+  .seg button{all:unset;cursor:pointer;padding:0 16px;height:100%;font:700 14px "Archivo";display:flex;align-items:center}
+  .seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+  .seg button:focus-visible{outline:3px solid var(--blue);outline-offset:-3px}
+  .idx{background:var(--yellow);margin:6px 6px 6px 0;padding:0 20px;font:800 15px "Archivo";cursor:pointer;border:0}
+  .idx:focus-visible{outline:3px solid #fff;outline-offset:-5px}
+  #map{position:relative;flex:1;min-height:0;margin:0 6px}
+  .fold{position:absolute;overflow:hidden}
+  .fold h2{position:absolute;left:12px;top:6px;font:900 clamp(26px,3.4vw,52px)/.95 "Archivo";font-stretch:62%;letter-spacing:.005em;pointer-events:none}
+  .fold h2 small{display:block;font:700 13px "Archivo";font-stretch:100%;margin-top:6px}
+  .tile{position:absolute;border:0;padding:0;text-align:left;cursor:pointer;font:inherit;color:inherit;overflow:hidden;transition:opacity .2s, transform .15s}
+  .tile:focus-visible{outline:4px solid var(--ink);outline-offset:-6px;z-index:3}
+  .tile .in{position:absolute;inset:0;padding:8px 10px;display:flex;flex-direction:column;justify-content:flex-end}
+  .tile b{font:800 clamp(15px,1.5vw,22px)/1.05 "Archivo";font-stretch:75%}
+  .tile .pc{position:absolute;top:6px;right:9px;font:800 15px "Archivo";font-variant-numeric:tabular-nums}
+  .tile.pii::before{content:"";position:absolute;top:0;left:0;width:34px;height:34px;background:repeating-linear-gradient(45deg,var(--ink) 0 3px,transparent 3px 7px);clip-path:polygon(0 0,100% 0,0 100%)}
+  .tile.guess{box-shadow:inset 0 0 0 3px var(--ink)}
+  .tile.guess .in::after{content:"Best guess";font:700 12px "Archivo";margin-top:3px}
+  .tile:hover{z-index:2;transform:scale(.985)}
+  .tile.dim{opacity:.14}
+  .c-fin{background:var(--red);color:#fff}.c-work{background:var(--blue);color:#fff}.c-personal{background:var(--yellow);color:var(--ink)}
+  .c-media{background:var(--white);color:var(--ink)}.c-unsorted{background:var(--grey);color:var(--ink)}
+  .fold.c-fin,.fold.c-work,.fold.c-personal,.fold.c-media,.fold.c-unsorted{background:transparent}
+  .tile.c-fin{background:#c92f22}.tile.c-work{background:#173f98}.tile.c-personal{background:#e0a512}.tile.c-media{background:#e4e3dc}.tile.c-unsorted{background:#a2a19b}
+  .bg{position:absolute;inset:0}
+  .foot{height:44px;flex:none;color:#fff;display:flex;align-items:center;gap:20px;padding:0 18px;font:600 14px "Archivo"}
+  .foot span:first-child{font:800 18px "Archivo";font-stretch:75%}
+  .foot .pth{font:13px "Cascadia Mono",Consolas,monospace;color:#cfcfc8}
+  .foot .r{margin-left:auto;display:flex;gap:16px;align-items:center}
+  .key i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px}
+  .sheet{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);background:var(--white);transform:translateX(102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);border-left:8px solid var(--ink);padding:26px 28px;overflow:auto;z-index:9}
+  .sheet.on{transform:none}
+  .sheet h3{font:900 44px/.95 "Archivo";font-stretch:62%;margin:12px 0 8px}
+  .sheet .chip{display:inline-block;padding:3px 10px;color:#fff;font:700 14px "Archivo"}
+  .sheet p{margin:10px 0;max-width:44ch;font-size:16px;line-height:1.4}
+  .sheet pre{font:13px/1.5 "Cascadia Mono",Consolas,monospace;background:#fff;border:3px solid var(--ink);padding:12px;white-space:pre-wrap;margin:10px 0}
+  .sheet .rb{background:var(--ink);color:var(--ink)}
+  .sheet .row{display:flex;gap:8px;margin:12px 0}
+  .btn{font:800 14px "Archivo";padding:9px 14px;background:var(--ink);color:#fff;border:0;cursor:pointer}
+  .btn.alt{background:transparent;color:var(--ink);border:3px solid var(--ink);padding:6px 12px}
+  .btn:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+  .x{position:absolute;top:14px;right:16px}
+  @media (max-width:760px){.seg{display:none}.logo{font-size:22px;padding:0 12px}.foot .r,.foot .pth{display:none}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="bar">
+  <div class="logo"><i></i>ShadowTree</div>
+  <label class="sbox"><input id="q" type="search" placeholder="Find by meaning" autocomplete="off" aria-label="Search files"></label>
+  <div class="seg" role="group" aria-label="Tile area"><button id="bs" aria-pressed="true">Area: size</button><button id="be" aria-pressed="false">Area: equal</button></div>
+  <button class="idx" type="button">Index folder</button>
+</div>
+<div id="map" role="list"></div>
+<div class="foot" id="foot"><span>Pick a block</span><span class="pth">Nothing is written to your folder.</span>
+  <span class="r"><span class="key"><i style="background:repeating-linear-gradient(45deg,#fff 0 2px,#000 2px 5px)"></i>personal data</span><span class="key"><i style="border:2px solid #fff"></i>best guess</span></span></div>
+<aside class="sheet" id="sheet" aria-label="File details"></aside>
+<script src="data.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let mode='size', sel=null, redacted=true, ids=null;
+function squarify(items,rect){
+  const total=items.reduce((s,i)=>s+i.v,0),scale=rect.w*rect.h/total;
+  const data=items.map(i=>({i,a:i.v*scale})).sort((a,b)=>b.a-a.a),out=[];
+  let {x,y,w,h}=rect,row=[];
+  const worst=(r,s)=>{const t=r.reduce((p,c)=>p+c.a,0),mx=Math.max(...r.map(c=>c.a)),mn=Math.min(...r.map(c=>c.a));return Math.max(s*s*mx/(t*t),t*t/(s*s*mn))};
+  const lay=r=>{const t=r.reduce((p,c)=>p+c.a,0);
+    if(w>=h){const cw=t/h;let yy=y;r.forEach(c=>{const rh=c.a/cw;out.push({item:c.i,x,y:yy,w:cw,h:rh});yy+=rh});x+=cw;w-=cw}
+    else{const rh=t/w;let xx=x;r.forEach(c=>{const rw=c.a/rh;out.push({item:c.i,x:xx,y,w:rw,h:rh});xx+=rw});y+=rh;h-=rh}};
+  while(data.length){const s=Math.min(w,h),n=data[0];if(!row.length||worst([...row,n],s)<=worst(row,s)){row.push(n);data.shift()}else{lay(row);row=[]}}
+  if(row.length)lay(row);return out;
+}
+const wt=f=>mode==='size'?Math.pow(f.bytes,.3)+22:1;
+function build(){
+  const map=$('map');map.innerHTML='';const W=map.clientWidth,H=map.clientHeight;if(!W||!H)return;
+  const groups=ST.folders.map(fo=>({fo,files:ST.files.filter(f=>f.links[0][0]===fo.id)})).filter(g=>g.files.length);
+  groups.forEach(g=>g.v=Math.max(g.files.reduce((s,f)=>s+wt(f),0),mode==='size'?170:1.9));
+  const GAP=6;
+  squarify(groups,{x:0,y:0,w:W,h:H}).forEach(r=>{
+    const g=r.item,box=document.createElement('section');box.className='fold c-'+g.fo.id;
+    Object.assign(box.style,{left:r.x+GAP/2+'px',top:r.y+GAP/2+'px',width:r.w-GAP+'px',height:r.h-GAP+'px'});
+    box.setAttribute('role','listitem');
+    const bg=document.createElement('div');bg.className='bg c-'+g.fo.id;box.appendChild(bg);
+    const h=document.createElement('h2');h.innerHTML=`${g.fo.name}<small>${g.files.length} ${g.files.length===1?'file':'files'}</small>`;box.appendChild(h);
+    const head=r.h>150&&r.w>200?74:r.h>100?54:30;
+    const inner={x:6,y:head,w:r.w-GAP-12,h:r.h-GAP-head-6};
+    if(inner.w>20&&inner.h>20){
+      squarify(g.files.map(f=>({f,v:wt(f)})),inner).forEach(t=>{
+        const f=t.item.f,b=document.createElement('button');
+        b.className=`tile c-${g.fo.id}`+(ST.piiList(f).length?' pii':'')+(ST.isGuess(f)?' guess':'')+(ids&&!ids.has(f.id)?' dim':'');
+        Object.assign(b.style,{left:t.x+2+'px',top:t.y+2+'px',width:t.w-4+'px',height:t.h-4+'px'});
+        const m=ids?ids.get(f.id):null;
+        b.innerHTML=`<span class="in"><b></b></span>${m!=null?`<span class="pc">${m}%</span>`:(g.fo.id!=='unsorted'&&t.w>90?`<span class="pc">${ST.pct(ST.score(f))}%</span>`:'')}`;
+        b.querySelector('b').textContent=f.title;
+        b.setAttribute('aria-label',f.title+', '+g.fo.name);
+        b.onmouseenter=b.onfocus=()=>hover(f);
+        b.onclick=()=>open(f);
+        box.appendChild(b);
+      });
+    }
+    map.appendChild(box);
+  });
+}
+function hover(f){$('foot').children[0].textContent=f.title;$('foot').children[1].textContent=ST.path(f)+'   '+ST.size(f.bytes)}
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function open(f){
+  sel=f;const fo=ST.primary(f),sh=$('sheet');
+  const txt=ST.parseText(f.text).map(s=>s.t==='text'?esc(s.v):(redacted?`<span class="rb">${'█'.repeat(Math.max(4,s.v.length))}</span>`:esc(s.v))).join('');
+  const bg={fin:'#c92f22',work:'#173f98',personal:'#8a6208',media:'#111',unsorted:'#555'}[fo.id];
+  sh.innerHTML=`<button class="btn alt x" aria-label="Close">Close</button><span class="chip" style="background:${bg}">${fo.name}${ST.isGuess(f)?', best guess '+ST.pct(ST.score(f))+'%':''}</span>
+    <h3></h3><p></p>
+    ${ST.piiList(f).length?`<div class="row"><button class="btn" id="tg">${redacted?'Show original':'Hide personal data'}</button></div>`:''}
+    <pre>${txt}</pre><div class="row"><button class="btn">Reveal on disk</button><button class="btn alt">Copy path</button></div>
+    <p style="font:13px 'Cascadia Mono',Consolas,monospace;word-break:break-all"></p>`;
+  sh.querySelector('h3').textContent=f.title;sh.querySelector('p').textContent=f.summary;sh.querySelector('p:last-child').textContent=ST.path(f);
+  sh.querySelector('.x').onclick=()=>sh.classList.remove('on');
+  const tg=$('tg');if(tg)tg.onclick=()=>{redacted=!redacted;open(f)};
+  sh.classList.add('on');
+}
+addEventListener('keydown',e=>{if(e.key==='Escape')$('sheet').classList.remove('on')});
+$('q').addEventListener('input',e=>{const r=ST.search(e.target.value).filter(x=>x.match>=25);ids=e.target.value.trim()?new Map(r.map(x=>[x.f.id,x.match])):null;build()});
+[['bs','size'],['be','equal']].forEach(([id,m])=>$(id).onclick=()=>{mode=m;$('bs').setAttribute('aria-pressed',m==='size');$('be').setAttribute('aria-pressed',m==='equal');build()});
+new ResizeObserver(build).observe($('map'));
+document.fonts&&document.fonts.ready.then(build);build();
+</script>
+</body>
+</html>
