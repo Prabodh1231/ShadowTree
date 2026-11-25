@@ -18,6 +18,11 @@ const ICONS = {
   x: [P('M6 6l12 12M18 6 6 18')],
   folder: [P('M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z')],
   info: [['circle', { cx: 12, cy: 12, r: 9 }], P('M12 11v5M12 8h.01')],
+  panelLeft: [['rect', { x: 3.5, y: 4.5, width: 17, height: 15, rx: 2 }], P('M9.5 4.5v15')],
+  panelRight: [['rect', { x: 3.5, y: 4.5, width: 17, height: 15, rx: 2 }], P('M14.5 4.5v15')],
+  sun: [['circle', { cx: 12, cy: 12, r: 4 }], P('M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4')],
+  moon: [P('M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z')],
+  monitor: [['rect', { x: 3, y: 4.5, width: 18, height: 12, rx: 2 }], P('M9 20h6M12 16.5V20')],
   search: [['circle', { cx: 11, cy: 11, r: 6.5 }], P('m16 16 4.5 4.5')],
 };
 

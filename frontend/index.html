@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>ShadowTree: find your files by meaning, never touch them</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b46d8'/%3E%3Cpath d='M7 12h18M7 17h18M7 22h11' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/png" href="/icon.png">
   <script>
     // Apply the saved theme before first paint so there is no flash.
     try { var t = localStorage.getItem('veilfs-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
@@ -14,6 +14,11 @@
 <body>
 <div class="app">
   <header class="toolbar">
+    <button id="left-toggle" class="tb-btn" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Show or hide folders" title="Show or hide folders (Ctrl+B)"></button>
+    <div class="tb-brand" title="Virtual folders for your real ones">
+      <img class="brand-icon" src="/icon.png" alt="" width="30" height="30">
+      <span class="brand-name">ShadowTree</span>
+    </div>
     <button id="back" class="tb-btn" type="button" aria-label="Back to All Files" title="Back to All Files" hidden></button>
     <div id="view-head" class="view-head"></div>
     <div class="vs" role="group" aria-label="Layout">
@@ -26,7 +31,8 @@
         <button id="mode-redacted" type="button" aria-pressed="true">Redacted</button>
         <button id="mode-original" type="button" aria-pressed="false">Original</button>
       </div>
-      <button id="info-toggle" class="tb-btn info-toggle" type="button" aria-label="Show file details" title="File details"></button>
+      <button id="theme-toggle" class="tb-btn" type="button"></button>
+      <button id="info-toggle" class="tb-btn" type="button" aria-controls="drawer" aria-expanded="true" aria-label="Show or hide file details" title="Show or hide file details (Ctrl+Alt+B)"></button>
       <form id="search-form" class="search-form" role="search" autocomplete="off">
         <label class="sr-only" for="q">Search your files</label>
         <input id="q" type="search" placeholder="Search by meaning, e.g. money I spent">
@@ -34,14 +40,7 @@
     </div>
   </header>
 
-  <aside class="sidebar" aria-label="Folders">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <div>
-        <div class="brand-name">ShadowTree</div>
-        <div class="brand-tag">Virtual folders for your real ones</div>
-      </div>
-    </div>
+  <aside id="sidebar" class="sidebar" aria-label="Folders">
     <nav id="folder-nav" class="folder-nav"></nav>
 
     <details id="new-folder-box" class="side-box">
@@ -68,7 +67,6 @@
     </form>
 
     <div class="side-foot">
-      <button id="theme-toggle" class="btn btn-quiet" type="button" aria-label="Switch light or dark mode">Dark mode</button>
       <a class="credit" href="https://desertant.com" target="_blank" rel="noopener noreferrer">Powered by Desert Ant Labs</a>
     </div>
   </aside>

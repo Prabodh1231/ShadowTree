@@ -134,14 +134,9 @@ function renderHead() {
   head.replaceChildren();
   $('back').hidden = !(state.search || state.view !== 'all');
   if (state.down || state.loading) return;
-  if (state.search) {
-    head.append(h('h1', { text: `Results for “${state.query}”` }), h('small', { text: plural(currentList().length, 'item', 'items') }));
-    return;
-  }
+  if (state.search) { head.append(h('small', { text: `${plural(currentList().length, 'result', 'results')} for “${state.query}”` })); return; }
   if (!state.cards.length) return;
-  const f = state.folders.find((x) => x.id === state.view);
-  head.append(h('h1', { text: f ? `${f.emoji ?? ''} ${f.name}`.trim() : 'All Files', title: f?.description || '' }),
-    h('small', { text: plural(currentList().length, 'item', 'items') }));
+  head.append(h('small', { text: plural(currentList().length, 'item', 'items') }));
 }
 
 function renderContent() {
@@ -330,6 +325,16 @@ function safeView(c) {
   return safeCache.get(key) ?? { title: c.name, keywords: [] };
 }
 
+// ---------- real previews ----------
+// A picture, or the first page of a PDF, can show things the text check never saw. So a preview follows the
+// same rule as the text: shown once the file is cleared by the privacy check, or when you ask for the Original.
+// Otherwise the placeholder stays (a page with the redacted summary, or an icon).
+const isVisual = (c) => c.kind === 'image' || c.kind === 'pdf';
+const canPreview = (c) => isVisual(c) && (state.mode === 'original' || privacyState(c) === 'clear');
+const previewUrl = (c, size) => `${API_BASE}/files/${c.id}/preview?size=${size}&v=${(c.sha256 ?? '').slice(0, 8)}`;
+/** The picture itself. If the backend cannot make one, the image removes itself and the placeholder shows. */
+const previewImg = (c, size, cls = 'thumb-img') => h('img', { class: cls, src: previewUrl(c, size), alt: '', loading: 'lazy', decoding: 'async', onerror: (e) => e.target.remove() });
+
 // ---------- items: one file as a filmstrip card, an icon, or a list row ----------
 function thumbEl(c) {
   const m = pct(c.match);
@@ -338,6 +343,7 @@ function thumbEl(c) {
   if (c.kind === 'image') t = h('span', { class: 'thumb thumb-image' }, icon('image', 30));
   else if (c.kind === 'audio') t = h('span', { class: 'thumb thumb-audio' }, [10, 26, 16, 38, 22, 44, 18, 30, 12, 24].map((n) => h('i', { style: `height:${n}px` })));
   else t = h('span', { class: 'thumb' }, h('p', { class: 'card-summary', text: cardSummary(c) }));
+  if (canPreview(c)) t.prepend(previewImg(c, 360));
   t.append(flags);
   if (m != null) t.append(h('span', { class: 'pct', text: m + '%', title: 'How well this matches your search' }));
   return t;
@@ -356,14 +362,14 @@ function itemEl(c) {
   const dot = h('span', { class: 'dot ' + status, title: statusText(status), 'aria-label': statusText(status) });
   const common = {
     type: 'button', role: 'option', 'data-id': c.id, 'aria-selected': String(sel), tabindex: sel ? '0' : '-1',
-    onclick: () => selectFile(c.id), ondblclick: () => openQuick(),
-    onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); selectFile(c.id).then(openQuick); } },
+    onclick: () => selectFile(c.id), ondblclick: () => openInApp(c.id),   // like Explorer: double click opens the file
+    onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); openInApp(c.id); } },
   };
   if (state.layout === 'list') {
     const top = c.folders?.[0];
     const fit = fitOf(c);
     return h('button', { ...common, class: 'row item' },
-      icon(kindIcon(c.kind), 16),
+      h('span', { class: 'rowicon' }, icon(kindIcon(c.kind), 16), canPreview(c) && previewImg(c, 96)),
       h('span', { class: 'nm' }, dot, h('span', { text: c.name, title: c.path })),
       h('span', { class: 'mute', text: top ? `${top.emoji ?? ''} ${top.name}`.trim() : '' }),
       h('span', { class: 'mute', text: fit != null ? fit + '%' : '' }),
@@ -380,6 +386,11 @@ function replaceCard(c) {
 
 async function copyPath(p) {
   try { await navigator.clipboard.writeText(p); toast('Path copied'); } catch { toast('Could not copy. Select the path and press Ctrl+C.'); }
+}
+/** Open the real file in the app Windows uses for it. ShadowTree only asks; it never edits the file. */
+async function openInApp(id) {
+  try { await api.openFile(id); toast('Opening in your default app…'); }
+  catch (e) { toast(e.status === 410 ? 'That file is no longer on disk.' : e.status === 415 ? 'This kind of file can’t be opened from here.' : e.message); }
 }
 async function reveal(id) {
   try { await api.reveal(id); toast('Opened in File Explorer'); }
@@ -409,8 +420,10 @@ function syncSelection(list) {
 
 async function selectFile(id, { force = false } = {}) {
   if (!force && id === state.sel && (drawerFile?.id === id || loadingId === id)) return;
+  const modeWas = state.mode;
   if (id !== state.sel) setMode('redacted', false);   // every file opens covered
   state.sel = id; drawerFile = null; loadingId = id;
+  if (modeWas === 'original' && state.mode === 'redacted') for (const c of currentList()) replaceCard(c);   // previews cover up again
   markSelected(); renderStage(); renderInfo();
   let f;
   try { f = await api.file(id); }
@@ -445,6 +458,7 @@ function sheetEl(f) {
   return h('article', { class: 'sheet sheet-' + f.kind },
     h('h2', { class: 'sheet-title', text: title }),
     h('div', { class: 'sheet-kind', text: KIND_LABEL[f.kind] ?? f.kind }),
+    canPreview(card) && previewImg(card, 1000, 'sheet-preview'),
     f.kind === 'audio' && h('div', { class: 'wave', 'aria-hidden': 'true' },
       Array.from({ length: 40 }, (_, i) => h('i', { style: `height:${Math.round(14 + Math.abs(Math.sin(i * 0.7 + f.id) * Math.cos(i * 0.23)) * 56)}px` }))),
     body);
@@ -480,7 +494,29 @@ async function redactDrawerSummary(f) {
   if (el && state.mode === 'redacted') el.textContent = text;
 }
 
-function closeInfo() { $('drawer').classList.remove('open'); }
+function closeInfo() { $('drawer').classList.remove('open'); paintPanels(); }
+
+// The folder list (left) and the details (right) can be folded away. The choice is remembered.
+// In a narrow window the details are a slide-over, so the right button opens and closes that instead.
+const panels = (() => {
+  try { return { left: true, right: true, ...JSON.parse(localStorage.getItem('veilfs-panels')) }; } catch { return { left: true, right: true }; }
+})();
+const narrow = () => matchMedia('(max-width: 1100px)').matches;
+function paintPanels() {
+  const app = document.querySelector('.app');
+  app.classList.toggle('no-left', !panels.left);
+  app.classList.toggle('no-right', !panels.right);
+  $('left-toggle').setAttribute('aria-expanded', String(panels.left));
+  $('info-toggle').setAttribute('aria-expanded', String(narrow() ? $('drawer').classList.contains('open') : panels.right));
+}
+function togglePanel(side) {
+  if (side === 'right' && narrow()) $('drawer').classList.toggle('open');
+  else {
+    panels[side] = !panels[side];
+    try { localStorage.setItem('veilfs-panels', JSON.stringify(panels)); } catch { /* ignore */ }
+  }
+  paintPanels();
+}
 function renderInfo() {
   const d = $('drawer');
   d.replaceChildren(h('button', { class: 'btn btn-small info-close', type: 'button', text: 'Close ✕', onclick: closeInfo }));
@@ -517,7 +553,8 @@ function renderInfo() {
       h('dt', { text: 'Type' }), h('dd', { text: f.kind }),
       h('dt', { text: 'AI' }), h('dd', { text: { ok: 'Summarised by the AI model', fallback: 'Basic summary (AI not used)', error: 'AI failed, basic summary used' }[status] ?? status })),
     h('div', { class: 'info-actions' },
-      h('button', { class: 'btn btn-primary btn-small', type: 'button', onclick: () => reveal(f.id) }, icon('open', 14), 'Reveal on Disk'),
+      h('button', { class: 'btn btn-primary btn-small', type: 'button', onclick: () => openInApp(f.id) }, icon('file', 14), 'Open'),
+      h('button', { class: 'btn btn-small', type: 'button', onclick: () => reveal(f.id) }, icon('open', 14), 'Reveal on Disk'),
       h('button', { class: 'btn btn-small', type: 'button', onclick: () => copyPath(f.path) }, icon('copy', 14), 'Copy path')),
   ].filter(Boolean));
 }
@@ -526,7 +563,7 @@ function setMode(mode, render = true) {
   state.mode = mode;
   $('mode-redacted').setAttribute('aria-pressed', String(mode === 'redacted'));
   $('mode-original').setAttribute('aria-pressed', String(mode === 'original'));
-  if (render) refreshSelected();
+  if (render) { renderContent(); refreshSelected(); }   // thumbnails follow the mode too
 }
 
 // Full-size look at the selected file (Space).
@@ -718,29 +755,45 @@ function startAI() {
 }
 
 // ---------- theme ----------
+// Three choices: follow Windows (no saved value), light, or dark. The button shows the current one and
+// the click moves to the next.
+const THEMES = ['system', 'light', 'dark'];
+const THEME_ICON = { system: 'monitor', light: 'sun', dark: 'moon' };
+const THEME_LABEL = { system: 'Theme: follow Windows', light: 'Theme: light', dark: 'Theme: dark' };
+function currentTheme() {
+  const t = document.documentElement.dataset.theme;
+  return t === 'light' || t === 'dark' ? t : 'system';
+}
 function applyThemeLabel() {
-  const dark = document.documentElement.dataset.theme === 'dark'
-    || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('theme-toggle').textContent = dark ? 'Switch to light mode' : 'Switch to dark mode';
-  return dark;
+  const t = currentTheme();
+  const btn = $('theme-toggle');
+  btn.replaceChildren(icon(THEME_ICON[t], 18));
+  const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
+  btn.title = `${THEME_LABEL[t]}. Click for ${next === 'system' ? 'follow Windows' : next}.`;
+  btn.setAttribute('aria-label', btn.title);
 }
 $('theme-toggle').addEventListener('click', () => {
-  const next = applyThemeLabel() ? 'light' : 'dark';
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem('veilfs-theme', next); } catch { /* ignore */ }
+  const next = THEMES[(THEMES.indexOf(currentTheme()) + 1) % THEMES.length];
+  if (next === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = next;
+  try { if (next === 'system') localStorage.removeItem('veilfs-theme'); else localStorage.setItem('veilfs-theme', next); } catch { /* ignore */ }
   applyThemeLabel();
+  toast(THEME_LABEL[next]);
 });
 
 // ---------- boot ----------
 $('back').append(icon('chevL', 18));
 $('v-icons').append(icon('grid', 16)); $('v-list').append(icon('list', 16)); $('v-gallery').append(icon('gallery', 16));
-$('info-toggle').append(icon('info', 18));
+$('left-toggle').append(icon('panelLeft', 18));
+$('info-toggle').append(icon('panelRight', 18));
 paintLayoutButtons();
+paintPanels();
+matchMedia('(max-width: 1100px)').addEventListener('change', paintPanels);
+$('left-toggle').addEventListener('click', () => togglePanel('left'));
+$('info-toggle').addEventListener('click', () => togglePanel('right'));
 for (const l of LAYOUTS) $('v-' + l).addEventListener('click', () => setLayout(l));
 $('back').addEventListener('click', () => { state.view = 'all'; clearSearch(); renderAll(); });
 $('mode-redacted').addEventListener('click', () => setMode('redacted'));
 $('mode-original').addEventListener('click', () => setMode('original'));
-$('info-toggle').addEventListener('click', () => $('drawer').classList.toggle('open'));
 $('quick').addEventListener('click', (e) => { if (e.target === $('quick')) closeQuick(); });
 $('scan-form').addEventListener('submit', onScan);
 $('pick-btn').addEventListener('click', () => chooseFolder());
@@ -762,8 +815,8 @@ $('nf-name').addEventListener('input', onNameInput);
 $('nf-desc').addEventListener('input', onNameInput);
 $('nf-emoji').addEventListener('input', () => (emojiTouched = true));
 
-// Keys work the way they do in a file manager: arrows walk the files, Space gives a full-size look,
-// "/" or Ctrl+F searches, Esc steps back.
+// Keys work the way they do in a file manager: arrows walk the files, Enter or a double click opens the
+// file, Space gives a full-size look, "/" or Ctrl+F searches, Esc steps back.
 document.addEventListener('keydown', (e) => {
   const typing = e.target.matches?.('input, textarea, select, [contenteditable]');
   if (e.key === 'Escape') {
@@ -772,6 +825,7 @@ document.addEventListener('keydown', (e) => {
     if (state.search) { clearSearch(); renderAll(); }
     return;
   }
+  if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'b') { e.preventDefault(); togglePanel(e.altKey ? 'right' : 'left'); return; }
   if ((e.key === 'f' && e.ctrlKey) || (e.key === '/' && !typing)) { e.preventDefault(); $('q').focus(); $('q').select(); return; }
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
   const list = currentList();
