@@ -228,3 +228,53 @@ def test_tauri_origins_allowed_and_health_names_app(client):
         r = client.get("/health", headers={"origin": origin})
         assert r.status_code == 200 and r.headers["access-control-allow-origin"] == origin
     assert client.get("/health").json()["app"] == "ShadowTree"
+
+
+def test_preview_png_for_images_only(client, sample_root):
+    run_scan(client, sample_root)
+    cards = {c["name"]: c for c in client.get("/files").json()}
+    r = client.get(f"/files/{cards['shot.png']['id']}/preview")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png" and r.content[:8] == b"\x89PNG\r\n\x1a\n"
+    assert client.get(f"/files/{cards['invoice.txt']['id']}/preview").status_code == 415   # text: no visual preview
+    assert client.get(f"/files/{cards['voice.wav']['id']}/preview").status_code == 415
+    assert client.get("/files/99999/preview").status_code == 404
+    assert client.get(f"/files/{cards['shot.png']['id']}/preview?size=9999").status_code == 422
+    assert not list(sample_root.rglob("*.tmp"))          # nothing was written into the scanned folder
+
+
+def test_preview_missing_file_is_410(client, sample_root):
+    run_scan(client, sample_root)
+    card = next(c for c in client.get("/files").json() if c["name"] == "shot.png")
+    (sample_root / "shot.png").unlink()
+    assert client.get(f"/files/{card['id']}/preview").status_code == 410
+
+
+def test_render_preview_pdf_first_page(tmp_path, monkeypatch):
+    import numpy as np
+    from app import extractors
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF-1.4 fake")
+    page = np.zeros((900, 600, 3), dtype=np.uint8)
+    monkeypatch.setattr(extractors, "render_pdf_pages", lambda data, pages=3, dpi=200, max_pixels=0: [page])
+    png = extractors.render_preview(pdf, "pdf", 300)
+    from io import BytesIO
+    from PIL import Image
+    assert max(Image.open(BytesIO(png)).size) == 300                 # fitted inside the box
+    monkeypatch.setattr(extractors, "render_pdf_pages", lambda *a, **k: [])
+    assert extractors.render_preview(pdf, "pdf") is None             # nothing rendered: no preview
+    assert extractors.render_preview(pdf, "text") is None
+
+
+def test_open_uses_the_default_app_and_only_the_index_path(client, sample_root, monkeypatch):
+    run_scan(client, sample_root)
+    opened = []
+    monkeypatch.setattr("app.main.os.startfile", lambda p: opened.append(p), raising=False)
+    assert client.post("/open", json={"file_id": 99999}).status_code == 404
+    assert client.post("/open", json={"path": "C:\\Windows\\notepad.exe"}).status_code == 422
+    assert client.post("/open", json={"file_id": 1, "path": "x"}).status_code == 422
+    assert opened == []
+    card = next(c for c in client.get("/files").json() if c["name"] == "invoice.txt")
+    assert client.post("/open", json={"file_id": card["id"]}).json() == {"opened": True}
+    assert opened == [card["path"]]
+    (sample_root / "invoice.txt").unlink()
+    assert client.post("/open", json={"file_id": card["id"]}).status_code == 410

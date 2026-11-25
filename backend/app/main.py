@@ -1,6 +1,7 @@
 """ShadowTree FastAPI app. Binds to 127.0.0.1 only (see docs/review/phase-1.md for the run command)."""
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sqlite3
@@ -11,11 +12,11 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import ai_cactus, ai_classify, ai_embed, db, jobs, picker, search as search_mod, vectors
-from .config import ALLOWED_HOSTS, ALLOWED_ORIGINS, apply_env, get_settings, is_inside
+from . import ai_cactus, ai_classify, ai_embed, db, extractors, jobs, picker, search as search_mod, vectors
+from .config import ALLOWED_HOSTS, ALLOWED_ORIGINS, SUPPORTED_EXTS, apply_env, get_settings, is_inside
 
 apply_env()  # before anything can import cactus or a model package (they are imported lazily)
 
@@ -168,6 +169,28 @@ def get_file(file_id: int):
     return db.file_cards(conn, [row], full=True)[0]
 
 
+@functools.lru_cache(maxsize=128)
+def _preview_png(path: str, kind: str, size: int, mtime: float, bytes_: int) -> bytes | None:
+    """Rendered previews, kept in memory only. mtime and size key the entry, so an edited file re-renders."""
+    return extractors.render_preview(Path(path), kind, size)
+
+
+@app.get("/files/{file_id}/preview")
+def file_preview(file_id: int, size: int = Query(default=480, ge=64, le=1200)):
+    """A PNG of an image or the first page of a PDF, rendered in memory from a read-only open."""
+    row = db.get_conn().execute("SELECT path, kind, size, mtime FROM files WHERE id=?", (file_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "file not found")
+    if row["kind"] not in ("image", "pdf"):
+        raise HTTPException(415, "this kind of file has no visual preview")
+    if not Path(row["path"]).is_file():
+        raise HTTPException(410, "file no longer exists on disk")
+    png = _preview_png(row["path"], row["kind"], size, row["mtime"], row["size"])
+    if png is None:
+        raise HTTPException(415, "no preview could be made for this file")
+    return Response(content=png, media_type="image/png", headers={"Cache-Control": "private, max-age=300"})
+
+
 @app.patch("/files/{file_id}/client-meta")
 def patch_client_meta(file_id: int, body: ClientMetaBody):
     conn = db.get_conn()
@@ -256,6 +279,26 @@ def reveal(body: RevealBody):
     # "/select," and the path are separate args (see phase-1.md deviation).
     subprocess.run(["explorer", "/select,", str(path)], check=False)
     return {"revealed": True}
+
+
+@app.post("/open")
+def open_file(body: RevealBody):
+    """Open an indexed file in the app Windows has chosen for its type (a double click in Explorer).
+    ShadowTree itself never writes to the file. Only the supported data types (text, PDF, picture, WAV)
+    are opened, and the path always comes from the index, never from the request."""
+    row = db.get_conn().execute("SELECT path FROM files WHERE id=?", (body.file_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "file not found")
+    path = Path(row["path"])
+    if path.suffix.lower() not in SUPPORTED_EXTS:
+        raise HTTPException(415, "this kind of file is not opened from here")
+    if not path.is_file():
+        raise HTTPException(410, "file no longer exists on disk")
+    startfile = getattr(os, "startfile", None)          # Windows only
+    if startfile is None:
+        raise HTTPException(501, "opening files is only supported on Windows")
+    startfile(str(path))
+    return {"opened": True}
 
 
 @app.get("/export/snapshot")

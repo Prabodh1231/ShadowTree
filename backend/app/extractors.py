@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import codecs
 import re
+import threading
 import wave
 from collections import Counter
 from pathlib import Path
@@ -100,6 +101,40 @@ def render_pdf_pages(data: bytes, pages: int = 3, dpi: int = 200, max_pixels: in
     finally:
         pdf.close()
     return out
+
+
+_preview_lock = threading.Lock()   # pdfium is not thread safe, and the scan thread renders PDFs too
+
+
+def render_preview(path: Path, kind: str, size: int = 480) -> bytes | None:
+    """A PNG of an image, or of the first page of a PDF, fitted inside `size` x `size`.
+    Built in memory from a read-only open: nothing is written anywhere. None when this kind
+    has no visual preview or the file cannot be rendered."""
+    import io
+
+    import numpy as np
+    from PIL import Image, ImageOps
+
+    try:
+        with open(path, "rb") as fh:
+            data = fh.read()
+        if kind == "image":
+            with Image.open(io.BytesIO(data)) as im:
+                img = ImageOps.exif_transpose(im).convert("RGB")
+        elif kind == "pdf":
+            with _preview_lock:
+                pages = render_pdf_pages(data, pages=1, dpi=72, max_pixels=4_000_000)
+            if not pages:
+                return None
+            img = Image.fromarray(np.ascontiguousarray(pages[0][:, :, ::-1]))   # BGR -> RGB
+        else:
+            return None
+        img.thumbnail((size, size))
+        out = io.BytesIO()
+        img.save(out, "PNG")
+        return out.getvalue()
+    except Exception:  # unreadable, corrupt, decompression bomb, pdfium error: no preview
+        return None
 
 
 def image_meta(path: Path) -> str:
