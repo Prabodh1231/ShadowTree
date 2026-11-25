@@ -21,6 +21,8 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
+    // The Rust build folder (src-tauri\target) holds locked files while tauri dev runs; watching it throws EBUSY.
+    watch: { ignored: ['**/src-tauri/**'] },
   },
   preview: {
     host: '127.0.0.1',
