@@ -176,7 +176,7 @@ def model_files_present() -> dict:
                       for f in ("config.json", "model.safetensors", "tokenizer.json")),
         "flashrank": (model_dir("flashrank") / "ms-marco-TinyBERT-L-2-v2").is_dir(),
         "ocr": all((model_dir("ocr") / f).is_file()
-                   for f in ("ch_PP-OCRv5_det_mobile.onnx", "ch_PP-OCRv5_rec_mobile.onnx")),
+                   for f in ("ch_PP-OCRv5_det_mobile.onnx", "ch_PP-OCRv5_rec_mobile.onnx", "ppocrv5_dict.txt")),
     }
 
 

@@ -84,11 +84,11 @@ def calls(monkeypatch):
                         lambda q, passages, wait=None: [3.0 if any(w in p.lower() for w in re.findall(r"\w{4,}", q.lower())) else -11.0 for p in passages])
 
     def embed(texts, wait=None):
-        """Bag-of-words hashed 4096-d unit vectors: shared words give a positive cosine; no model."""
-        out = np.zeros((len(texts), 4096), dtype=np.float32)
+        """Bag-of-words hashed 256-d unit vectors: shared words give a positive cosine; no model."""
+        out = np.zeros((len(texts), 256), dtype=np.float32)
         for i, s in enumerate(texts):
             for w in re.findall(r"\w+", s.lower()):
-                out[i, zlib.crc32(w.encode()) % 4096] += 1.0
+                out[i, zlib.crc32(w.encode()) % 256] += 1.0
         return out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-9)
 
     monkeypatch.setattr(ai_embed, "embed", embed)

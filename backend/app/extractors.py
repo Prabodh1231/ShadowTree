@@ -88,13 +88,15 @@ def render_pdf_pages(data: bytes, pages: int = 3, dpi: int = 200, max_pixels: in
     try:
         for i in range(min(pages, len(pdf))):
             page = pdf[i]
-            w, h = page.get_size()                      # PDF points (1/72 inch)
-            scale = dpi / 72
-            if w * h * scale * scale > max_pixels:
-                scale = (max_pixels / (w * h)) ** 0.5
-            img = page.render(scale=scale).to_pil().convert("RGB")
-            out.append(np.asarray(img)[:, :, ::-1].copy())  # RGB -> BGR for rapidocr
-            page.close()
+            try:
+                w, h = page.get_size()                  # PDF points (1/72 inch)
+                scale = dpi / 72
+                if w * h * scale * scale > max_pixels:
+                    scale = (max_pixels / (w * h)) ** 0.5
+                img = page.render(scale=scale).to_pil().convert("RGB")
+                out.append(np.asarray(img)[:, :, ::-1].copy())  # RGB -> BGR for rapidocr
+            finally:
+                page.close()
     finally:
         pdf.close()
     return out

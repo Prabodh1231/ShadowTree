@@ -1,7 +1,8 @@
 ﻿# VeilFS API notes (Phase 0, verified)
 
-Every call later phases make to `cactus`, `gliclass`, `@desert-ant-labs/*` and
-`@litertjs/core` must match this file. Everything here was read from the
+Every call later phases make to `cactus`, `onnxruntime`, `tokenizers`, `model2vec`, `flashrank`,
+`rapidocr`, `pypdfium2`, `@desert-ant-labs/*` and `@litertjs/core` must match this file
+(the ONNX stack is in [ShadowTree model stack](#shadowtree-model-stack-step-1-verified)). Everything here was read from the
 installed package source and then run on this machine.
 
 Machine: Windows x64 (13th Gen Intel i5-13500HX, 20 logical CPUs, 13.7 GB RAM,
@@ -25,14 +26,14 @@ headless Microsoft Edge 158.
 
 ## Shared setup for the backend (env vars)
 
-Set these **before** `import cactus` / `import gliclass`:
+Set these **before** `import cactus` or any model package (`onnxruntime`, `model2vec`, `flashrank`, `rapidocr`); `config.apply_env()` does it:
 
 | Variable | Value | Why |
 |---|---|---|
 | `CACTUS_TELEMETRY` | `0` | `cactus/_telemetry.py` otherwise POSTs usage counts to a Supabase endpoint on `complete/run/extract/transcribe/stream` |
 | `DO_NOT_TRACK` | `1` | second Cactus opt-out (same `_enabled()` check) |
 | `XDG_CACHE_HOME` | `backend/data/cache` | Cactus engine + `.cact` weights cache (default `~/.cache/cactus`) |
-| `HF_HOME` | `backend/data/hf` | Hugging Face cache for Cactus downloads and GLiClass (default `~/.cache/huggingface`) |
+| `HF_HOME` | `backend/data/hf` | Hugging Face cache for Cactus downloads (default `~/.cache/huggingface`). DeBERTa, potion, FlashRank and OCR files live in `backend/data/models/<name>` instead |
 | `HF_HUB_DISABLE_TELEMETRY` | `1` | no HF library telemetry |
 | `HF_HUB_OFFLINE` | `1` once models are cached | stops all Hub calls, including Cactus `_register_download`, which re-downloads `config.json` on every `fetch_weights()` to count downloads |
 | `HF_HUB_DISABLE_SYMLINKS_WARNING` | `1` | Windows has no symlinks without Developer Mode; the cache still works (degraded, copies) |

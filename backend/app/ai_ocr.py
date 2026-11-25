@@ -9,6 +9,10 @@ from __future__ import annotations
 
 from .ai_cactus import MODEL_LOCK
 from .ai_classify import NotReady
+
+
+class NotDownloaded(NotReady):
+    """The OCR model files are not on disk yet (before scripts/download_models.py)."""
 from .config import apply_env, get_settings, model_dir
 
 DET = "ch_PP-OCRv5_det_mobile.onnx"
@@ -24,8 +28,8 @@ def _load():
     if _state["error"]:
         raise NotReady(_state["error"])
     d = model_dir("ocr")
-    if not ((d / DET).is_file() and (d / REC).is_file()):
-        raise NotReady("OCR models are not downloaded: run scripts/download_models.py")  # may appear later
+    if not all((d / f).is_file() for f in (DET, REC, DICT)):
+        raise NotDownloaded("OCR models are not downloaded: run scripts/download_models.py")  # may appear later
     apply_env()
     try:
         from rapidocr import ModelType, OCRVersion, RapidOCR
@@ -33,10 +37,10 @@ def _load():
             "Det.model_path": str(d / DET), "Det.ocr_version": OCRVersion.PPOCRV5, "Det.model_type": ModelType.MOBILE,
             "Rec.model_path": str(d / REC), "Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.model_type": ModelType.MOBILE,
             "Global.log_level": "warning",
+            "Global.use_cls": False,  # no angle classifier: its model is not ours and could be fetched; pages are upright
             "EngineConfig.onnxruntime.intra_op_num_threads": get_settings().onnx_threads,
         }
-        if (d / DICT).is_file():
-            params["Rec.rec_keys_path"] = str(d / DICT)
+        params["Rec.rec_keys_path"] = str(d / DICT)
         _state["engine"] = RapidOCR(params=params)
     except Exception as exc:
         _state["error"] = f"OCR failed to load: {type(exc).__name__}: {exc}"

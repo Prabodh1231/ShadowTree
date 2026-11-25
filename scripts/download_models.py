@@ -27,13 +27,10 @@ MS = "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0"
 OCR_FILES = {
     "det": ("ch_PP-OCRv5_det_mobile.onnx", f"{MS}/onnx/PP-OCRv5/det/ch_PP-OCRv5_det_mobile.onnx",
             "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae"),
-    "rec_en": ("en_PP-OCRv5_rec_mobile.onnx", f"{MS}/onnx/PP-OCRv5/rec/en_PP-OCRv5_rec_mobile.onnx",
-               "c3461add59bb4323ecba96a492ab75e06dda42467c9e3d0c18db5d1d21924be8"),
     "rec_ch": ("ch_PP-OCRv5_rec_mobile.onnx", f"{MS}/onnx/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile.onnx",
                "5825fc7ebf84ae7a412be049820b4d86d77620f204a041697b0494669b1742c5"),
 }
 OCR_DICTS = {
-    "ppocrv5_en_dict.txt": f"{MS}/paddle/PP-OCRv5/rec/en_PP-OCRv5_rec_mobile/ppocrv5_en_dict.txt",
     "ppocrv5_dict.txt": f"{MS}/paddle/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile/ppocrv5_dict.txt",
 }
 

@@ -217,9 +217,9 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
                     card = ai_cactus.build_card(p, kind, p.name)
                     rec = {**card, "path": path_s, "name": p.name, "ext": p.suffix.lower(), "kind": kind,
                            "size": st.st_size, "mtime": st.st_mtime, "sha256": digest, "indexed_at": _now(),
-                           "ext_ver": ai_cactus.EXTRACT_VERSION}
+                           "ext_ver": card.get("ext_ver", ai_cactus.EXTRACT_VERSION)}
                     fid = db.upsert_file(conn, rec)
-                    if row:  # content changed: the browser-side privacy scan is stale
+                    if row and row["sha256"] != digest:  # content changed: the browser-side privacy scan is stale
                         conn.execute("UPDATE files SET client_meta='{}' WHERE id=?", (fid,))
                         conn.commit()
                     note = classify_file(conn, fid, folders, rec)

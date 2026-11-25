@@ -196,6 +196,15 @@ def transcribe_audio(path: Path) -> str:
 
 # ---- the per-file card ------------------------------------------------------------
 
+def _ocr_failed(exc: Exception, notes: list[str]) -> str:
+    """'skipped' when the OCR models are simply not downloaded (no note); 'error' plus a note otherwise."""
+    from . import ai_ocr
+    if isinstance(exc, ai_ocr.NotDownloaded):
+        return "skipped"
+    notes.append(f"ocr: {type(exc).__name__}: {exc}")
+    return "error"
+
+
 def _ocr_img(data: bytes) -> list[str]:
     from . import ai_ocr  # lazy: ai_ocr imports this module for MODEL_LOCK
     return ai_ocr.ocr_image(data)
@@ -221,7 +230,7 @@ def build_card(path: Path, kind: str, name: str) -> dict:
     prov = {"title": "fallback", "summary": "fallback", "keywords": "fallback"}
     text = ""
     source_model = None            # which model produced `text` (ocr / mirage / whistle)
-    ocr_state = None               # None (not run) | ok | empty | error
+    ocr_state = None               # None (not run) | ok | empty | skipped (no models yet) | error
     meta_line = ""
     status_error = False
 
@@ -243,8 +252,7 @@ def build_card(path: Path, kind: str, name: str) -> dict:
                         text = (text.strip() + "\n" if text.strip() else "") + "\n".join(lines)
                         source_model = "ocr"
                 except Exception as exc:
-                    ocr_state = "error"
-                    notes.append(f"ocr: {type(exc).__name__}: {exc}")
+                    ocr_state = _ocr_failed(exc, notes)
         elif kind == "image":
             meta_line = ex.image_meta(path)
             ocr_lines: list[str] = []
@@ -254,8 +262,7 @@ def build_card(path: Path, kind: str, name: str) -> dict:
             except ex.ExtractError:
                 raise
             except Exception as exc:
-                ocr_state = "error"
-                notes.append(f"ocr: {type(exc).__name__}: {exc}")
+                ocr_state = _ocr_failed(exc, notes)
             desc = ""
             try:  # 2. Mirage: the visual description
                 desc = describe_image(path)
@@ -354,4 +361,6 @@ def build_card(path: Path, kind: str, name: str) -> dict:
         "text_excerpt": (text or meta_line)[: cfg.excerpt_chars],
         "ai_status": status,
         "ai_error": ai_error,
+        # no stamp when OCR could not run, so the next scan reads the file again once models exist
+        "ext_ver": None if ocr_state in ("error", "skipped") else EXTRACT_VERSION,
     }

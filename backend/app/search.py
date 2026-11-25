@@ -6,11 +6,13 @@ Pipeline
      FTS hits + 20 recent files, as before.
   2. FlashRank scores query vs the same passage text that was embedded
      (title + summary + keywords + first 300 chars). ai_classify.rerank returns the raw logit z.
-  3. match (0..100), see `match_percent`:
-        confident (best z >= Z_USEFUL, i.e. the reranker found a real match):
+  3. match (0..100), see `match_percent`. Weights of the parts that exist are renormalised
+     (each mix is divided by the sum of the weights it uses):
+        confident (best z >= Z_USEFUL = -6, i.e. the reranker found a real match):
             mix = 0.6 * sigmoid((z + 4) / 2) + 0.3 * min(cos / 0.6, 1) + 0.1 * bm25_norm
         otherwise (reranker sees only noise, z about -11 for every file):
-            mix = 0.7 * min(cos / 0.35, 1) (+ 0.3 * bm25_norm when there are FTS hits)
+            semantic-only mix = min(cos / 0.35, 1); with FTS hits, bm25_norm joins at weight 0.3
+            against 0.7 for the cosine part
         match = round(100 * mix) + name boost (+20 when every query word is in the name/title)
   4. Results need match >= MIN_MATCH. If none do, `results` is [] and `weak` holds the top 3.
   Fallbacks: no FlashRank folder -> cosine order, match from cosine alone (`rerank: false`,
@@ -76,7 +78,9 @@ def name_boost(q: str, name: str, title: str) -> int:
 
 def cosine_top(conn, qvec: np.ndarray, limit: int) -> dict[int, float]:
     """{file_id: cosine} for the `limit` stored vectors closest to qvec (unit vectors: a dot product)."""
-    rows = conn.execute("SELECT id, vec FROM files WHERE vec IS NOT NULL").fetchall()
+    # a blob of another length (older model, corrupt row) is skipped, not allowed to break np.stack
+    rows = [r for r in conn.execute("SELECT id, vec FROM files WHERE vec IS NOT NULL")
+            if len(r["vec"]) == ai_embed.DIM * 4]
     if not rows:
         return {}
     ids = [r["id"] for r in rows]
@@ -141,7 +145,7 @@ def score_all(conn, q: str, cand_limit: int | None = None) -> tuple[list[dict], 
     ids = [i for i in ids if i in rows]
     if qvec is not None:  # cosine for FTS hits that were not in the top list
         for i in ids:
-            if i not in cos and rows[i]["vec"] is not None:
+            if i not in cos and rows[i]["vec"] is not None and len(rows[i]["vec"]) == ai_embed.DIM * 4:
                 cos[i] = float(ai_embed.from_blob(rows[i]["vec"]) @ qvec)
 
     z: dict[int, float] | None
