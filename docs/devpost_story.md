@@ -39,7 +39,7 @@ File contents, text and summaries never leave the machine. The only outbound req
 - **Privacy while the AI is working.** Titles and keywords can leak the personal data we are trying to hide. The UI hides a file's title and keywords until the privacy pass has checked it, and masks PII in tags and in the titles of PII files.
 - **Several models on one PC.** We replaced the heavy folder-sorting model (GLiClass with PyTorch) with small ONNX models. The backend now needs about 625 MB of RAM (working set), down from 2.3 GB, with one worker and one background scan job.
 - **Making a slow scan feel alive.** Cards appear as each file finishes (the UI refetches every 2 seconds) instead of after the whole scan.
-- **Honest limits.** The folder sorter is strict: on a large real folder many files stay in Unsorted (124 of 164 PDFs in one test). Search ranks by meaning with small local models, so it is approximate: "money I spent" lists the bank transfer note first, and the receipt and invoice after it, the app is Windows only, and the Desert Ant license check can't be turned off. We documented these instead of hiding them.
+- **Honest limits.** The folder sorter is careful: files it is unsure about get a dashed "Best guess" folder, and on one real folder 63 of 134 files still stayed in Unsorted. Search ranks by meaning with small local models, so it is approximate: a vague query such as "money I spent" now shows only weak matches under "No strong matches. Closest:", the app is Windows only, and the Desert Ant license check can't be turned off. We documented these instead of hiding them.
 
 ## Accomplishments that we're proud of
 

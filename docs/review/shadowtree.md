@@ -2,6 +2,165 @@
 
 Date: 25 Nov 2026. All commits are local on `main`. Nothing is pushed. Owner plan: `docs/review/shadowtree-plan.md`. Numbers come from the step notes in `reports/shadowtree/` (not tracked, `reports/` is gitignored).
 
+## Review fixes (owner feedback, 25 Nov)
+
+Two fixes from the owner's review, checked again by a separate chat. Commits are local, not pushed.
+
+### Fix 1: best-guess folder (`a984a9c`, `470375f`)
+
+Rule, in order:
+1. A topic folder with a score of 0.5 or more links as before.
+2. If none reaches 0.5 and the file is not an image or audio file, the single best topic folder links when its score is at least `SOFT_FLOOR` (env, default 0.15). The real score is stored.
+3. Below the floor, the file goes to Unsorted.
+4. Images and audio stay sorted by file type (Screenshots & Media).
+5. New-folder jobs keep the strict 0.5 rule.
+6. In the UI, a topic chip under 0.5 is dashed and muted, with the tooltip "Best guess".
+
+Tests: `tests/test_soft_floor.py` (best 0.3 gives one soft link with score 0.3; best 0.14 gives Unsorted; a strong match gets one link; a new-folder job does not link a 0.3 file). Backend suite: 102 passed.
+
+Sample folder (real models, scratch DB outside the repo): 9 links, Unsorted 0, best-guess links 0.
+
+| File | Links |
+|---|---|
+| bank transfer note.txt | Finance & Receipts 0.911 |
+| coffee receipt.txt | Finance & Receipts 0.985 |
+| invoice-2041.pdf | Finance & Receipts 0.974 |
+| journal.txt | Personal & Notes 0.895 |
+| meeting notes.md | Work & Research 0.575 |
+| research outline.md | Work & Research 0.591 |
+| Screenshot 2026-11-20.png | Screenshots & Media 1.0 |
+| voice memo.wav | Screenshots & Media 1.0, Finance & Receipts 0.918 |
+
+Real folder (one test, read-only, scratch DB, counts only): Unsorted went from 112 of 142 files before to 63 of 134 after. 49 files got a best-guess link. The scan took 547 s with 0 errors. The folder changed a little between the two runs.
+
+### Fix 2: a high match needs real reranker agreement (`64ad26f`, `8d605f5`, `c59ee5e`)
+
+Cause, with numbers from the old run:
+- BM25 is min-max scaled, so a lone full-text hit is always 1.0. For "tax documents" only the research outline contains "documents". With z -10.84 (noise) and cosine 0.267, the old noise branch gave 0.7 * min(0.267 / 0.35, 1) + 0.3 * 1.0 = 83%.
+- For "invoice" the screenshot had z 0.09 (weak but real) and cosine 0.345. The old sigmoid((z + 4) / 2) gave it 70%, next to the invoice at 100%.
+- For "money I spent" every z was between -11.1 and -10.8 (noise). The old branch used cosine alone, so the bank note (0.301) led and the receipt (0.106) was 4th.
+
+Old formula:
+`
+z >= -6:  0.6 * sigmoid((z + 4) / 2) + 0.3 * min(cos / 0.6, 1) + 0.1 * bm25_norm
+else:     0.7 * min(cos / 0.35, 1) + 0.3 * bm25_norm
+`
+New formula (`backend/app/search.py`):
+`
+z >= -6:  0.7 * sigmoid((z - 1) / 0.7) + 0.15 * min(cos / 0.6, 1) + 0.15 * bm25_norm
+z < -6:   20 * (0.5 * min(cos / 0.35, 1) + 0.5 * clamp((z + 12) / 1.2, 0, 1))   (capped at 20, under the cut-off of 25)
+no reranker: 0.7 * min(cos / 0.35, 1) + 0.3 * bm25_norm
+`
+The name boost (+20) and the cut-off of 25 are unchanged.
+
+Re-run by this chat (`backend\.venv\Scripts\python scripts\search_check.py`, real models, its own samples and scratch DB):
+
+~~~
+scan: done {'new': 8, 'changed': 0, 'skipped': 0, 'removed': 0, 'skipped_too_large': 0, 'skipped_cloud_only': 0, 'skipped_hidden_or_link': 0}
+
+== 'tax documents'  rerank=True
+  weak    17%  z=-10.84 cos= 0.267 bm25=1.00 boost= 0  research outline.md
+  weak    10%  z=-11.44 cos= 0.195 bm25=0.00 boost= 0  bank transfer note.txt
+  weak    10%  z=-11.58 cos= 0.213 bm25=0.00 boost= 0  meeting notes.md
+  weak     8%  z=-11.51 cos= 0.121 bm25=0.00 boost= 0  invoice-2041.pdf
+  weak     7%  z=-11.50 cos= 0.092 bm25=0.00 boost= 0  Screenshot 2026-11-20.png
+  weak     6%  z=-11.50 cos= 0.066 bm25=0.00 boost= 0  coffee receipt.txt
+  results: [] weak: ['research outline.md', 'bank transfer note.txt', 'meeting notes.md']
+
+== 'volcano penguin'  rerank=True
+  weak     5%  z=-11.53 cos= 0.055 bm25=0.00 boost= 0  Screenshot 2026-11-20.png
+  weak     4%  z=-11.49 cos= 0.008 bm25=0.00 boost= 0  journal.txt
+  weak     4%  z=-11.49 cos=-0.029 bm25=0.00 boost= 0  invoice-2041.pdf
+  weak     4%  z=-11.50 cos=-0.017 bm25=0.00 boost= 0  meeting notes.md
+  weak     4%  z=-11.54 cos=-0.018 bm25=0.00 boost= 0  voice memo.wav
+  weak     4%  z=-11.56 cos=-0.029 bm25=0.00 boost= 0  coffee receipt.txt
+  results: [] weak: ['Screenshot 2026-11-20.png', 'journal.txt', 'invoice-2041.pdf']
+
+== 'invoice'  rerank=True
+  STRONG 100%  z=  1.83 cos= 0.461 bm25=1.00 boost=20  invoice-2041.pdf
+  weak    24%  z=  0.09 cos= 0.345 bm25=0.00 boost= 0  Screenshot 2026-11-20.png
+  weak    12%  z=-11.57 cos= 0.282 bm25=0.00 boost= 0  coffee receipt.txt
+  weak    10%  z=-11.58 cos= 0.213 bm25=0.00 boost= 0  voice memo.wav
+  weak     9%  z=-11.53 cos= 0.187 bm25=0.00 boost= 0  meeting notes.md
+  weak     9%  z=-11.58 cos= 0.210 bm25=0.00 boost= 0  bank transfer note.txt
+  results: ['invoice-2041.pdf'] weak: []
+
+== 'money I spent'  rerank=True
+  weak    17%  z=-11.02 cos= 0.301 bm25=0.00 boost= 0  bank transfer note.txt
+  weak    13%  z=-10.81 cos= 0.106 bm25=0.00 boost= 0  coffee receipt.txt
+  weak    13%  z=-11.09 cos= 0.195 bm25=0.00 boost= 0  voice memo.wav
+  weak    11%  z=-11.01 cos= 0.093 bm25=0.00 boost= 0  invoice-2041.pdf
+  weak    11%  z=-11.09 cos= 0.109 bm25=0.00 boost= 0  Screenshot 2026-11-20.png
+  weak     6%  z=-11.49 cos= 0.048 bm25=0.00 boost= 0  journal.txt
+  results: [] weak: ['bank transfer note.txt', 'coffee receipt.txt', 'voice memo.wav']
+
+== 'pay the bill'  rerank=True
+  STRONG  97%  z=  3.23 cos= 0.675 bm25=1.00 boost= 0  voice memo.wav
+  weak    23%  z= -4.33 cos= 0.373 bm25=0.93 boost= 0  invoice-2041.pdf
+  weak    18%  z=-10.99 cos= 0.340 bm25=0.00 boost= 0  bank transfer note.txt
+  weak    16%  z= -9.89 cos= 0.225 bm25=0.00 boost= 0  coffee receipt.txt
+  weak    15%  z=-11.05 cos= 0.242 bm25=0.00 boost= 0  Screenshot 2026-11-20.png
+  weak     7%  z=-11.57 cos= 0.136 bm25=0.00 boost= 0  meeting notes.md
+  results: ['voice memo.wav'] weak: []
+
+== 'my diary'  rerank=True
+  STRONG  98%  z=  3.47 cos= 0.598 bm25=1.00 boost= 0  journal.txt
+  weak    10%  z=-11.50 cos= 0.203 bm25=0.00 boost= 0  meeting notes.md
+  weak    10%  z=-11.50 cos= 0.218 bm25=0.00 boost= 0  voice memo.wav
+  weak     7%  z=-11.48 cos= 0.097 bm25=0.00 boost= 0  research outline.md
+  weak     7%  z=-11.53 cos= 0.103 bm25=0.00 boost= 0  invoice-2041.pdf
+  weak     7%  z=-11.53 cos= 0.117 bm25=0.00 boost= 0  coffee receipt.txt
+  results: ['journal.txt'] weak: []
+
+== 'coffee'  rerank=True
+  STRONG  39%  z= -8.43 cos= 0.327 bm25=1.00 boost=20  coffee receipt.txt
+  weak     6%  z=-11.56 cos= 0.083 bm25=0.00 boost= 0  journal.txt
+  weak     6%  z=-11.58 cos= 0.080 bm25=0.00 boost= 0  research outline.md
+  weak     6%  z=-11.59 cos= 0.106 bm25=0.00 boost= 0  invoice-2041.pdf
+  weak     5%  z=-11.55 cos= 0.043 bm25=0.00 boost= 0  voice memo.wav
+  weak     5%  z=-11.56 cos= 0.048 bm25=0.00 boost= 0  meeting notes.md
+  results: ['coffee receipt.txt'] weak: []
+
+== 'error message'  rerank=True
+  STRONG  29%  z= -3.30 cos= 0.556 bm25=1.00 boost= 0  Screenshot 2026-11-20.png
+  weak    10%  z=-11.44 cos= 0.188 bm25=0.00 boost= 0  meeting notes.md
+  weak    10%  z=-11.48 cos= 0.186 bm25=0.00 boost= 0  coffee receipt.txt
+  weak     9%  z=-11.45 cos= 0.150 bm25=0.00 boost= 0  bank transfer note.txt
+  weak     9%  z=-11.46 cos= 0.164 bm25=0.00 boost= 0  invoice-2041.pdf
+  weak     8%  z=-11.35 cos= 0.087 bm25=0.00 boost= 0  journal.txt
+  results: ['Screenshot 2026-11-20.png'] weak: []
+
+== 'meeting'  rerank=True
+  STRONG  45%  z= -3.35 cos= 0.390 bm25=1.00 boost=20  meeting notes.md
+  weak    13%  z=-10.42 cos= 0.104 bm25=0.00 boost= 0  voice memo.wav
+  weak     9%  z=-11.09 cos= 0.064 bm25=0.00 boost= 0  bank transfer note.txt
+  weak     8%  z=-11.45 cos= 0.127 bm25=0.00 boost= 0  invoice-2041.pdf
+  weak     7%  z=-11.48 cos= 0.094 bm25=0.00 boost= 0  coffee receipt.txt
+  weak     6%  z=-11.45 cos= 0.041 bm25=0.00 boost= 0  journal.txt
+  results: ['meeting notes.md'] weak: []
+~~~
+
+Owner's cases, all as expected: "tax documents" and "volcano penguin" give results [] (weak only). "invoice" gives only the invoice as strong. "money I spent" has no strong match, and the coffee receipt is 2nd (weak). "pay the bill" gives the voice memo, "my diary" the journal, "coffee" the coffee receipt, "error message" the screenshot, "meeting" the meeting notes.
+
+### Small things
+- `ai_classify.py` module docstring no longer says classify waits for DeBERTa (`827d20e`).
+- README: scan-speed note (about 3-4 s per file on a real folder; 375 s and 547 s for about 135 files), and the two limits rewritten.
+
+### Commands (trimmed)
+~~~
+cd backend; .\.venv\Scripts\python -m pytest -q          102 passed in 9.94s
+backend\.venv\Scripts\python scripts\search_check.py     9 queries, output above
+cd frontend; npm run build                               built in 1.10s
+~~~
+
+### Known issues after these fixes
+- "money I spent" has only weak matches. The receipt is second.
+- "error message" finds the screenshot at 29%, near the cut-off of 25.
+- "pay the bill": the invoice dropped to weak (23%).
+- "coffee" is carried by the name boost (39% with +20).
+- The formula was tuned on 8 sample files.
+- The dashed "Best guess" chip was not checked visually (CSS variables only).
+- A fresh full scan of the real folder was not repeated by this chat.
 ## What was done, per step
 
 | Step | What | Commits |
@@ -57,7 +216,7 @@ The live check on the release window matched these (Finance 4, Work 2, Personal 
 
 New folder "Bills to pay" with description "invoices, bills and payments that are due" (potion pre-filter at cosine 0.30, then DeBERTa): the invoice (0.965) and the voice memo (0.896) join. Bank transfer note 0.303, others are filtered or low. Job time 0.08 s.
 
-## Search results
+## Search results (before Fix 2, kept for history)
 
 Match percentage, 8 sample files, HTTP, real models (live check).
 
@@ -106,9 +265,9 @@ Scan of the 8 samples: about 7 s after Step 3, 8.5 s with OCR. Classify: about 2
 
 ## Known issues
 
-- **The sorter is strict.** On a copy of a real 164-PDF folder, 124 files went to Unsorted after the re-link (GLiClass had put 132 in Work & Research). The sample folder is fine.
+- **The sorter is strict.** Before Fix 1, a copy of a real 164-PDF folder sent 124 files to Unsorted. With the soft floor, 63 of 134 files stayed in Unsorted in one real test. The sample folder is fine.
 - **Work & Research margin is thin** on the samples: 0.575 and 0.591 against 0.5.
-- **"money I spent"** lists the bank transfer note first (see Search results).
+- **"money I spent"** now shows only weak matches (see Review fixes above).
 - **Needle returns nothing for some files** (3 of 8 in the live check). The fallback title and summary are used, and sorting is not affected.
 - **OCR** dropped one space on a test scanned bill ("30November"). Only the first 3 pages of a scanned PDF are read. Old images and thin PDFs are read again once after an upgrade, which runs Mirage and Needle on them. Screenshots indexed before the OCR text fix keep Mirage's text copy until re-indexed.
 - **Not tested by hand:** a real drag from Explorer, the native folder picker with real clicks, window focus on a second start, a hung model after the CSP fix (the same "not available" path was tested with `?ai=off`), and the Desert Ant license call to `events.desertant.com` under the new CSP (not seen in the last run, not blocked).

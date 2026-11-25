@@ -130,18 +130,19 @@ Licenses were read from each model card or package page on 2026-11-25.
 Search finds candidates with SQLite full-text search and potion vectors, then FlashRank re-orders them. The match percentage comes from this formula (`backend/app/search.py`). `z` is the FlashRank score as a logit, `cos` is the potion cosine, and `bm25_norm` is the full-text score from 0 to 1.
 
 ```
-Weights of the parts that exist are renormalised
-(each mix is divided by the sum of the weights it uses):
+Weights of the parts that exist are renormalised.
 
-confident (best z >= -6, i.e. the reranker found a real match):
-    mix = 0.6 * sigmoid((z + 4) / 2) + 0.3 * min(cos / 0.6, 1) + 0.1 * bm25_norm
-otherwise (reranker sees only noise, z about -11 for every file):
-    semantic-only mix = min(cos / 0.35, 1)
-    with full-text hits, bm25_norm joins at weight 0.3 against 0.7 for the cosine part
+z >= -6 (the reranker found a real match):
+    mix = 0.7 * sigmoid((z - 1) / 0.7) + 0.15 * min(cos / 0.6, 1) + 0.15 * bm25_norm
+z < -6 (the reranker sees only noise, z about -11 for every file):
+    match = 20 * (0.5 * min(cos / 0.35, 1) + 0.5 * clamp((z + 12) / 1.2, 0, 1))
+    This is capped at 20, so it always stays under the cut-off of 25. No bm25 here.
+no reranker available:
+    mix = 0.7 * min(cos / 0.35, 1) + 0.3 * bm25_norm
 match = round(100 * mix) + name boost (+20 when every query word is in the name or title)
 ```
 
-Results below a match of 25 are listed as "weak".
+Results below a match of 25 are weak. When nothing reaches 25, the app shows "No strong matches. Closest:" and lists the weak ones.
 ## Built for this hackathon
 
 Everything in this repo was written for this hackathon: the FastAPI backend, scanner, search, the web UI, the Tauri desktop shell and the privacy pass. The AI models and runtimes in the credits below are third-party and used as published.
@@ -149,13 +150,14 @@ Everything in this repo was written for this hackathon: the FastAPI backend, sca
 ## Known limitations
 
 - **Needle is extractive.** The Cactus Needle model copies words from the file. Its titles and summaries can look rough.
-- **Search ranks by meaning, with small local models.** The order is approximate. "money I spent" lists the bank transfer note first, then the voice memo, and the receipt and invoice after them. Plain words such as "invoice", "pay the bill" or "my diary" land well. A search takes about 4 ms (8 files) to 31 ms (164 files) once warm.
+- **Search ranks by meaning, with small local models.** The order is approximate. A high match needs the reranker to agree, so vague queries now show "No strong matches. Closest:" with weak matches only. "money I spent" is one of these: the receipt is second, but only as a weak match. "invoice", "pay the bill", "my diary" and "meeting" give a strong match. "error message" finds the screenshot at about 29%, close to the cut-off of 25. The formula was tuned on 8 sample files. A search takes about 4 ms (8 files) to 31 ms (164 files) once warm.
 - **Windows only.** Paths, the Reveal button and the voice memo sample use Windows features.
 - **Old indexes.** An index made before the model change keeps its old folder scores. Delete `backend\data\veilfs.db` and scan again for a clean start.
 - **Desert Ant license check.** The Desert Ant browser models contact `events.desertant.com` when they load. It has no opt-out. No file content is sent. Details in Network & privacy.
-- **The folder sorter is strict.** DeBERTa only files a document under a folder when it is fairly sure. On a large real folder, many files stay in Unsorted: in one test, 124 of 164 PDFs. On the sample folder all files are sorted, but the Work & Research margin is thin (scores 0.575 and 0.591 against a 0.5 cut-off), so a small change to a file could move it to Unsorted.
+- **The folder sorter is careful.** DeBERTa files a document under a folder when its score is 0.5 or more. If no folder reaches 0.5, the file joins its single best topic folder when the score is at least 0.15 (`SOFT_FLOOR`), shown as a dashed "Best guess" chip. Below 0.15 it goes to Unsorted. New-folder jobs still use the strict 0.5 rule. On one real folder, 63 of 134 files stayed in Unsorted and 49 got a best-guess link. On the sample folder all files are sorted, but the Work & Research margin is thin (0.575 and 0.591 against 0.5).
 - **Privacy check first.** A file whose privacy check has not finished (or could not run) shows only its name and "Privacy check not available", never its text.
 - **Desktop drag and drop.** The native folder dialog and the drop handler are wired, but a real drag from Explorer was not tested by hand.
+- **Scanning is slow on real folders.** Expect about 3-4 s per file, because OCR and Mirage run on PDFs and images. Measured: 375 s and 547 s for about 135 files. Cards appear as each file finishes.
 - **OCR is good, not perfect.** On the sample screenshot it read the error code right, but on a test scanned bill it dropped one space ("30November"). Only the first 3 pages of a scanned PDF are read. The first scan after an upgrade reads old images and thin PDFs again, which runs Mirage and Needle on them once.
 
 ## Next steps (not built)
