@@ -108,14 +108,17 @@ def test_real_match_is_strong_and_first(client, sample_root):
 
 
 def test_match_percent_modes():
-    # reranker found a real match: its sigmoid dominates
-    assert match_percent(3.0, 0.5, 1.0, True, True) >= 90
-    assert match_percent(-11.0, 0.2, 0.0, True, True) < MIN_MATCH
-    # reranker sees only noise: cosine decides, 0.35 is a full match, 0.05 is noise
-    assert match_percent(-11.0, 0.35, 0.0, False, False) == 100
-    assert match_percent(-11.0, 0.05, 0.0, False, False) < MIN_MATCH
-    assert match_percent(None, None, 0.0, False, False) == 0
-
+    # reranker agrees: its sigmoid dominates
+    assert match_percent(3.0, 0.5, 1.0, True) >= 90
+    # weak agreement (z about 0) with a decent cosine and no keyword match stays below the cut-off
+    assert match_percent(0.1, 0.345, 0.0, True) < MIN_MATCH
+    # reranker sees only noise: never reaches the cut-off, even with a perfect cosine and a lone FTS hit
+    assert match_percent(-10.8, 0.9, 1.0, True) < MIN_MATCH
+    assert match_percent(-11.5, 0.05, 0.0, False) < match_percent(-10.8, 0.3, 0.0, False)
+    # no reranker: cosine decides, 0.35 is a full match
+    assert match_percent(None, 0.35, 0.0, False) == 100
+    assert match_percent(None, 0.05, 0.0, False) < MIN_MATCH
+    assert match_percent(None, None, 0.0, False) == 0
 
 def test_real_rerank_and_embed_never_download(tmp_path, monkeypatch):
     """With an empty data dir the real functions say NotReady and touch no network (sockets are blocked)."""

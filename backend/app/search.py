@@ -6,16 +6,16 @@ Pipeline
      FTS hits + 20 recent files, as before.
   2. FlashRank scores query vs the same passage text that was embedded
      (title + summary + keywords + first 300 chars). ai_classify.rerank returns the raw logit z.
-  3. match (0..100), see `match_percent`. Weights of the parts that exist are renormalised
-     (each mix is divided by the sum of the weights it uses):
-        confident (best z >= Z_USEFUL = -6, i.e. the reranker found a real match):
-            mix = 0.6 * sigmoid((z + 4) / 2) + 0.3 * min(cos / 0.6, 1) + 0.1 * bm25_norm
-        otherwise (reranker sees only noise, z about -11 for every file):
-            semantic-only mix = min(cos / 0.35, 1); with FTS hits, bm25_norm joins at weight 0.3
-            against 0.7 for the cosine part
+  3. match (0..100), see `match_percent`. A high match needs the reranker to agree.
+        z >= Z_NOISE = -6 (the reranker sees a real match):
+            mix = 0.7 * sigmoid((z - 1) / 0.7) + 0.15 * min(cos / 0.6, 1) + 0.15 * bm25_norm
+        z < Z_NOISE (the reranker sees only noise, z about -11 for every file):
+            match = 20 * (0.5 * min(cos / 0.35, 1) + 0.5 * clamp((z + 12) / 1.2, 0, 1))
+            so it stays under MIN_MATCH (weak list) unless the name boost is added
         match = round(100 * mix) + name boost (+20 when every query word is in the name/title)
-  4. Results need match >= MIN_MATCH. If none do, `results` is [] and `weak` holds the top 3.
-  Fallbacks: no FlashRank folder -> cosine order, match from cosine alone (`rerank: false`,
+        bm25_norm is min-max scaled, so a lone FTS hit is 1.0; that is why it only weighs 0.15
+        and never counts in the noise case.  4. Results need match >= MIN_MATCH. If none do, `results` is [] and `weak` holds the top 3.
+  Fallbacks: no FlashRank folder -> cosine order, match = 0.7 * min(cos / 0.35, 1) + 0.3 * bm25_norm (`rerank: false`,
   `note` explains); no vectors either -> BM25 only. Nothing here downloads a model.
 shortcut: cosine is a numpy scan over all stored vectors (fine to a few 10k files); upgrade
 to an ANN index beyond that.
@@ -35,12 +35,13 @@ MIN_MATCH = 25
 NAME_BOOST = 20
 FTS_LIMIT, RECENT_LIMIT, COS_LIMIT, BATCH = 40, 20, 50, 16
 WEAK_COUNT = 3
-# match formula constants, tuned on the sample folder (see reports/shadowtree/step2.md)
-Z_MID, Z_SCALE = -4.0, 2.0
-REL_W, COS_W, BM25_W = 0.6, 0.3, 0.1
-Z_USEFUL = -6.0   # best z at or above this: the reranker found a real match
-COS_FULL = 0.35   # semantic-only mode: cosine 0.35 counts as 100%
-
+# match formula constants, tuned on the sample folder (see reports/shadowtree/fix2-search.md)
+Z_MID, Z_SCALE = 1.0, 0.7
+REL_W, COS_W, BM25_W = 0.7, 0.15, 0.15
+Z_NOISE = -6.0    # z below this: the reranker found no match; the file stays under MIN_MATCH
+NOISE_MAX = 20    # best possible match without reranker agreement (below MIN_MATCH)
+Z_FLOOR, Z_RANGE = -12.0, 1.2   # noise z (about -11.6 to -10.8) maps to 0..1 for ordering only
+COS_FULL = 0.35   # cosine 0.35 counts as 100% in the noise and no-reranker cases
 
 def build_match(q: str) -> str | None:
     """Quote every token so INV-2041, a lone quote, NEAR or a:b cannot break FTS syntax.
@@ -101,25 +102,22 @@ def _rerank_batches(q: str, texts: list[str]) -> list[float]:
     return out
 
 
-def match_percent(z: float | None, cos: float | None, bm25: float, has_fts: bool, confident: bool) -> int:
-    """0..100 before the name boost. Weights of the parts that exist are renormalised.
-    confident: the reranker found a real match for this query (best z >= Z_USEFUL), so its
-    sigmoid(z) is trusted. Otherwise it only sees noise (z near -11 for every file; TinyBERT
-    is mostly lexical) and the potion cosine carries the match, scaled so 0.35 = 100%."""
-    parts: list[tuple[float, float]] = []
-    if z is not None and confident:
-        parts.append((REL_W, 1.0 / (1.0 + math.exp(-(z - Z_MID) / Z_SCALE))))
-        if cos is not None:
-            parts.append((COS_W, min(1.0, max(0.0, cos / 0.6))))
-    elif cos is not None:
-        parts.append((0.7, min(1.0, max(0.0, cos / COS_FULL))))
+def match_percent(z: float | None, cos: float | None, bm25: float, has_fts: bool) -> int:
+    """0..100 before the name boost. A high match needs the reranker to agree (z >= Z_NOISE);
+    without it the match is at most NOISE_MAX. z None means no reranker: cosine and BM25 only."""
+    cos_full = min(1.0, max(0.0, cos / COS_FULL)) if cos is not None else None
+    if z is None:
+        parts = ([(0.7, cos_full)] if cos_full is not None else []) + ([(0.3, bm25)] if has_fts else [])
+        return round(100 * sum(w * v for w, v in parts) / sum(w for w, _ in parts)) if parts else 0
+    if z < Z_NOISE:
+        zr = min(1.0, max(0.0, (z - Z_FLOOR) / Z_RANGE))
+        return round(NOISE_MAX * (0.5 * (cos_full or 0.0) + 0.5 * zr))
+    parts = [(REL_W, 1.0 / (1.0 + math.exp(-(z - Z_MID) / Z_SCALE)))]
+    if cos is not None:
+        parts.append((COS_W, min(1.0, max(0.0, cos / 0.6))))
     if has_fts:
-        parts.append((BM25_W if confident else 0.3, bm25))
-    if not parts:
-        return 0
-    w = sum(p[0] for p in parts)
-    return round(100 * sum(p[0] * p[1] for p in parts) / w)
-
+        parts.append((BM25_W, bm25))
+    return round(100 * sum(w * v for w, v in parts) / sum(w for w, _ in parts))
 
 def score_all(conn, q: str, cand_limit: int | None = None) -> tuple[list[dict], dict]:
     """Candidates with their parts. Returns (rows, info). `cand_limit` None: the normal limits."""
@@ -158,7 +156,6 @@ def score_all(conn, q: str, cand_limit: int | None = None) -> tuple[list[dict], 
         z = None
         note = ("Ranking by meaning only: the re-ranker is not available (%s)" % exc) if qvec is not None \
             else "Plain text search only: the search models are not available"
-    confident = bool(z) and max(z.values()) >= Z_USEFUL
     out = []
     for i in ids:
         r = rows[i]
@@ -166,11 +163,11 @@ def score_all(conn, q: str, cand_limit: int | None = None) -> tuple[list[dict], 
         zi, ci, bi = (z[i] if z else None), cos.get(i), norm.get(i, 0.0)
         if z is None and ci is None and i not in norm:
             continue                                   # BM25-only mode: FTS hits only
-        m = match_percent(zi, ci, bi, bool(norm), confident)
+        m = match_percent(zi, ci, bi, bool(norm))
         out.append({"id": i, "row": r, "z": zi, "cos": ci, "bm25": bi, "boost": boost,
                     "match": max(0, min(100, m + boost))})
     out.sort(key=lambda t: (-t["match"], -(t["z"] if t["z"] is not None else -99.0), -(t["cos"] or 0.0)))
-    return out, {"vec": qvec is not None, "rerank": z is not None, "confident": confident, "note": note}
+    return out, {"vec": qvec is not None, "rerank": z is not None, "note": note}
 
 
 def search(conn, q: str) -> dict:
