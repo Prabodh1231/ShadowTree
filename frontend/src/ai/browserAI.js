@@ -1,4 +1,4 @@
-﻿// Browser AI: Desert Ant Redact, Gist and Emo on the main thread.
+// Browser AI: Desert Ant Redact, Gist and Emo on the main thread.
 //
 // Browser builds only (never a /native entry). The three packages instantiate a
 // ~46 MB wasm core at import time, so they are loaded with dynamic import() the
@@ -45,7 +45,7 @@ async function selfHosted(name) {
 async function loadOne(name, load) {
   const opts = { litertWasmDir: new URL('/litert-wasm/', globalThis.location.href).href };
   if (await selfHosted(name)) opts.modelBaseUrl = `/models/${name}/`;
-  return withTimeout(load(opts), 120000);
+  return withTimeout(load(opts), 60000);
 }
 
 const NONE = { redact: false, gist: false, emo: false };
@@ -173,13 +173,14 @@ export async function analyzeFile(fullFile) {
 }
 
 // One file at a time. Skips cards whose stored sha256 already matches.
-export async function runPrivacyPass(cards, { apiBase = '', signal, onUpdate } = {}) {
+export async function runPrivacyPass(cards, { apiBase = '', signal, onUpdate, onProgress } = {}) {
   const out = { status: 'ok', done: 0, skipped: 0, failed: 0 };
   try {
     const ready = await startBrowserAI();
     if (!ready.redact && !ready.gist) return { ...out, status: 'unavailable' };
     for (const card of cards ?? []) {
       if (signal?.aborted) return { ...out, status: 'aborted' };
+      try { onProgress?.(card); } catch { /* UI callback only */ }
       if (card.client_meta?.sha256 && card.client_meta.sha256 === card.sha256) {
         out.skipped++;
         continue;

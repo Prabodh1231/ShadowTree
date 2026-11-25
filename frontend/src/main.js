@@ -211,12 +211,38 @@ function downState() {
 }
 async function retryConnect() { state.loading = true; renderAll(); await refresh(); if (!state.down) { await resumeIfRunning(); startAI(); } }
 
+// ---------- privacy gate (fails closed) ----------
+// A file's own text (summary, title, tags) is shown only after the privacy check has covered
+// this exact content. Until then, or when the check failed, hung or is off: file name only.
+// The check counts as running while it makes progress: LOAD_MS for the models to load,
+// FILE_MS for one file (the model call timeout is 20 s).
+const LOAD_MS = 65000, FILE_MS = 25000;   // LOAD_MS: just over the 60 s model load limit in browserAI.js
+const privacy = { running: true, phase: 'loading', at: Date.now() };  // the first pass starts after first paint
+let privacyTimer = null;
+function privacyTouch(phase) {
+  privacy.at = Date.now(); if (phase) privacy.phase = phase;
+  clearTimeout(privacyTimer);
+  privacyTimer = setTimeout(renderAll, (privacy.phase === 'loading' ? LOAD_MS : FILE_MS) + 500); // end "checking" on time
+}
+const isCovered = (c) => !!c.client_meta?.sha256 && c.client_meta.sha256 === c.sha256;
+/** 'clear' | 'pii' | 'checking' | 'unavailable' */
+function privacyState(c) {
+  if (hasPii(c)) return 'pii';
+  if (isCovered(c)) return 'clear';
+  const limit = privacy.phase === 'loading' ? LOAD_MS : FILE_MS;
+  if (state.scanning) return 'checking';   // the pass starts when the scan ends
+  return privacy.running && Date.now() - privacy.at < limit ? 'checking' : 'unavailable';
+}
+const PRIVACY_TEXT = { checking: 'Checking privacy...', unavailable: 'Privacy check not available' };
+
 // Card summaries of files flagged as PII use the same rule as the drawer's
 // Redacted view: browser-redacted text, or a short line. Cached per id + sha256.
 const cardSummaries = new Map(); // key -> string | null (null: tried, not available)
 function cardSummary(c) {
+  const ps = privacyState(c);
+  if (ps === 'checking' || ps === 'unavailable') return PRIVACY_TEXT[ps];
   if (!c.summary) return 'No summary available.';
-  if (!hasPii(c)) return c.summary;
+  if (ps === 'clear') return c.summary;
   const key = `${c.id}:${c.sha256}`;
   if (!cardSummaries.has(key)) {
     cardSummaries.set(key, null);
@@ -236,13 +262,9 @@ const safeCache = new Map(); // key -> {title, keywords} | null
 const cardObjs = new Map();  // id -> latest card object, to redraw after the cache fills
 let safeQueue = Promise.resolve();
 function safeView(c) {
-  const covered = !!c.client_meta?.sha256 && c.client_meta.sha256 === c.sha256;
-  if (!hasPii(c)) {
-    // Not yet checked while the browser AI is on or still working: hide, like a PII file.
-    const waiting = !covered && !browserAIOff() && !state.aiUnavailable;
-    if (!waiting) return { title: c.title || c.name, keywords: c.keywords ?? [] };
-    return { title: c.name, keywords: [], checking: true };
-  }
+  const ps = privacyState(c);
+  if (ps === 'clear') return { title: c.title || c.name, keywords: c.keywords ?? [] };
+  if (ps !== 'pii') return { title: c.name, keywords: [], checking: ps === 'checking' };
   const key = `${c.id}:${c.sha256}`;
   if (!safeCache.has(key)) {
     safeCache.set(key, null);
@@ -330,7 +352,9 @@ function closeDrawer() { $('drawer').hidden = true; $('scrim').hidden = true; dr
 function summaryText(f, mode) {
   if (!f.summary) return 'No summary available.';
   if (mode === 'original') return f.summary;
-  return f.redactedSummary ?? 'Summary hidden in Redacted view';
+  if (f.redactedSummary != null) return f.redactedSummary;
+  const ps = privacyState(cardObjs.get(f.id) ?? f);
+  return PRIVACY_TEXT[ps] ?? 'Summary hidden in Redacted view';
 }
 async function redactDrawerSummary(f) {
   if (f.redactedSummary !== undefined || !f.summary) return;
@@ -501,9 +525,11 @@ async function startPrivacyPass() {
   passAbort?.abort();
   const ctl = new AbortController(); passAbort = ctl;
   let r;
+  privacy.running = true; privacyTouch('loading'); renderAll();
   try {
     r = await runPrivacyPass(state.cards, {
       apiBase: API_BASE, signal: ctl.signal,
+      onProgress: () => privacyTouch('working'),
       onUpdate: (clientMeta, card) => {
         const id = card?.id;
         const cur = id != null ? cardById(id) : null;
@@ -521,6 +547,7 @@ async function startPrivacyPass() {
     });
   } catch { r = { status: 'unavailable' }; }
   if (ctl.signal.aborted) return;
+  privacy.running = false; clearTimeout(privacyTimer); renderAll();  // whatever is still unchecked is now 'unavailable'
   if (r?.status === 'unavailable' && !state.aiUnavailable) {
     state.aiUnavailable = true;
     note('Privacy scan unavailable. Everything else works, but personal details will not be flagged.');
