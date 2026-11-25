@@ -2,6 +2,7 @@ import './styles.css';
 import { api, ApiError, API_BASE } from './api.js';
 import { startBrowserAI, suggestEmoji, runPrivacyPass, redactText, safeLabels, browserAIOff } from './ai/browserAI.js';
 import { inTauri, waitForBackend, pickFolderNative, listenNativeDrop } from './desktop.js';
+import { icon, kindIcon } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
 const START_CMD = 'cd "<repo>\\backend"\n.\\.venv\\Scripts\\Activate.ps1\nuvicorn app.main:app --host 127.0.0.1 --port 8000';
@@ -20,6 +21,12 @@ function h(tag, props = {}, ...kids) {
   return el;
 }
 
+const LAYOUTS = ['gallery', 'list', 'icons'];
+function savedLayout() {
+  try { const v = localStorage.getItem('veilfs-view'); if (LAYOUTS.includes(v)) return v; } catch { /* ignore */ }
+  return 'gallery';
+}
+
 const state = {
   folders: [],
   cards: [],          // every indexed file
@@ -31,20 +38,27 @@ const state = {
   scanning: false,
   job: null,
   aiUnavailable: false,
+  layout: savedLayout(),   // 'gallery' | 'list' | 'icons'
+  sel: null,               // id of the selected file
+  mode: 'redacted',        // 'redacted' | 'original': which version of the text is shown
 };
 let passAbort = null;
 let pollTimer = null;
 
 const SENSITIVE = 'Sensitive (PII)';
 const UNSORTED = 'Unsorted';
-const KIND_ICON = { pdf: '📄', text: '📝', image: '🖼️', audio: '🎧' };
+const MEDIA = 'Screenshots & Media';
+const KIND_LABEL = { pdf: 'PDF document', text: 'Text file', image: 'Picture, text read from it', audio: 'Recording, transcript' };
 
 // ---------- helpers ----------
 const pct = (v) => { if (v == null || isNaN(v)) return null; return Math.round(v <= 1 ? v * 100 : v); };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const fmtSize = (b) => (b == null ? '' : b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b / 1024) + ' KB' : (b / 1048576).toFixed(1) + ' MB');
 // A topic-folder link under 0.5 is a best guess (soft floor). Unsorted and type links never are.
+const isGuessLink = (l) => l.name !== UNSORTED && l.name !== MEDIA && l.score > 0 && l.score < 0.5;
+const isGuess = (c) => (c.folders ?? []).some(isGuessLink);
 const chip = (l) => {
-  const guess = l.name !== UNSORTED && l.name !== 'Screenshots & Media' && l.score > 0 && l.score < 0.5;
+  const guess = isGuessLink(l);
   return h('span', guess ? { class: 'chip guess', title: 'Best guess' } : { class: 'chip' }, `${l.emoji ?? ''} ${l.name}`.trim(),
     pct(l.score) > 0 && h('b', { text: pct(l.score) + '%' }));
 };
@@ -102,57 +116,83 @@ function renderNav() {
   for (const f of rest) nav.append(item(f.id, f.emoji || '📁', f.name, f.file_count));
 }
 
-function renderHead() {
-  const head = $('view-head');
-  head.replaceChildren();
-  if (state.down || state.loading) return;
-  if (state.search) {
-    head.append(h('h1', { text: `Results for “${state.query}”` }));
-    return;
-  }
-  if (!state.cards.length) return;
-  const f = state.folders.find((x) => x.id === state.view);
-  head.append(h('h1', { text: f ? `${f.emoji ?? ''} ${f.name}`.trim() : 'All Files' }),
-    h('p', { text: f?.description || 'Every file ShadowTree has read, in one place.' }));
-}
-
 function visibleCards() {
   if (state.view === 'all') return state.cards;
   const f = state.folders.find((x) => x.id === state.view);
   if (f?.name === SENSITIVE) return state.cards.filter(hasPii);
   return state.cards.filter((c) => c.folders?.some((l) => l.folder_id === state.view));
 }
+/** The files shown right now: search results (or the closest weak ones), else the open folder. */
+function currentList() {
+  if (state.down || state.loading) return [];
+  if (state.search) return state.search.results.length ? state.search.results : state.search.weak;
+  return visibleCards();
+}
+
+function renderHead() {
+  const head = $('view-head');
+  head.replaceChildren();
+  $('back').hidden = !(state.search || state.view !== 'all');
+  if (state.down || state.loading) return;
+  if (state.search) {
+    head.append(h('h1', { text: `Results for “${state.query}”` }), h('small', { text: plural(currentList().length, 'item', 'items') }));
+    return;
+  }
+  if (!state.cards.length) return;
+  const f = state.folders.find((x) => x.id === state.view);
+  head.append(h('h1', { text: f ? `${f.emoji ?? ''} ${f.name}`.trim() : 'All Files', title: f?.description || '' }),
+    h('small', { text: plural(currentList().length, 'item', 'items') }));
+}
 
 function renderContent() {
   const box = $('content');
+  const prev = box.querySelector('.strip, .rows, .icons');
+  const keep = prev ? { l: prev.scrollLeft, t: prev.scrollTop } : null;
   box.replaceChildren();
-  if (state.down) return box.append(downState());
-  if (state.loading) return box.append(h('div', { class: 'grid' }, [1, 2, 3, 4, 5, 6].map(() => h('div', { class: 'skeleton' }))));
-  if (state.search) return box.append(...searchView());
-  if (!state.cards.length) return box.append(state.scanning ? readingState() : emptyState());
-  const list = visibleCards();
+  if (state.down) { box.append(downState()); return syncSelection([]); }
+  if (state.loading) { box.append(h('div', { class: 'skeleton-strip' }, [1, 2, 3, 4, 5, 6].map(() => h('div', { class: 'skeleton' })))); return syncSelection([]); }
+  if (state.search) {
+    const { results, weak } = state.search;
+    if (!results.length && !weak.length) {
+      box.append(h('div', { class: 'state' }, h('div', { class: 'big', text: '🔍' }),
+        h('h2', { text: 'No matches' }),
+        h('p', { text: 'Nothing in your index is close to that. Try other words, like “receipt” or “meeting notes”.' })));
+      return syncSelection([]);
+    }
+    if (!results.length) box.append(h('div', { class: 'grid-label', text: 'No strong matches. Closest:' }));
+  } else if (!state.cards.length) {
+    box.append(state.scanning ? readingState() : emptyState());
+    return syncSelection([]);
+  }
+  const list = currentList();
   if (!list.length) {
     const f = state.folders.find((x) => x.id === state.view);
     const sens = f?.name === SENSITIVE;
-    return box.append(h('div', { class: 'state' },
+    box.append(h('div', { class: 'state' },
       h('div', { class: 'big', text: sens ? '🛡️' : '📭' }),
       h('h2', { text: 'Nothing here yet' }),
       h('p', { text: sens
         ? (state.aiUnavailable ? 'The privacy scan is not available, so nothing can be flagged.' : 'Files that contain personal details (like emails or phone numbers) show up here once the privacy scan has run.')
         : 'No file matches this folder. Try “All Files” or index more files.' })));
+    return syncSelection([]);
   }
-  box.append(grid(list));
+  box.append(listView(list));
+  const now = box.querySelector('.strip, .rows, .icons');
+  if (keep && now) { now.scrollLeft = keep.l; now.scrollTop = keep.t; }
+  syncSelection(list);
 }
 
-function grid(list) { return h('div', { class: 'grid' }, list.map((c) => cardEl(c))); }
-
-function searchView() {
-  const { results, weak } = state.search;
-  if (results.length) return [grid(results.map((c) => c))];
-  if (weak.length) return [h('div', { class: 'grid-label', text: 'No strong matches. Closest:' }), grid(weak)];
-  return [h('div', { class: 'state' }, h('div', { class: 'big', text: '🔍' }),
-    h('h2', { text: 'No matches' }),
-    h('p', { text: 'Nothing in your index is close to that. Try other words, like “receipt” or “meeting notes”.' }))];
+function listView(list) {
+  if (state.layout === 'list') {
+    return h('div', { class: 'rows', role: 'listbox', 'aria-label': 'Files' },
+      h('div', { class: 'row head', 'aria-hidden': 'true' }, h('span'), h('span', { text: 'Name' }), h('span', { text: 'Filed in' }),
+        h('span', { text: state.search ? 'Match' : 'Fit' }), h('span', { text: 'Size' }), h('span', { text: 'Notes' })),
+      list.map((c) => itemEl(c)));
+  }
+  if (state.layout === 'icons') return h('div', { class: 'icons', role: 'listbox', 'aria-label': 'Files' }, list.map((c) => itemEl(c)));
+  return h('div', { class: 'gallery' },
+    h('div', { class: 'stage', id: 'stage' }),
+    h('div', { class: 'strip', role: 'listbox', 'aria-label': 'Files', 'aria-orientation': 'horizontal' }, list.map((c) => itemEl(c))));
 }
 
 function readingState() {
@@ -167,13 +207,13 @@ function emptyState() {
     h('p', { text: 'ShadowTree reads your files and sorts them into virtual folders. Your real files are never moved, changed or deleted.' }),
     h('button', { class: 'btn btn-primary btn-big', type: 'button', onclick: () => chooseFolder(), text: '📂 Choose a folder…' }),
     quickRow(),
-    h('p', { class: 'hint', text: 'You can also drag a folder onto this window, or paste a path in the box at the top.' }));
+    h('p', { class: 'hint', text: 'You can also drag a folder onto this window, or paste a path in the box on the left.' }));
 }
 
 // One-click shortcuts for the usual places (filled in once the backend answers).
 let quickCache = null;
 function quickRow() {
-  const row = h('div', { class: 'quick', 'aria-label': 'Common folders' });
+  const row = h('div', { class: 'quick-row', 'aria-label': 'Common folders' });
   const fill = (list) => {
     if (!list?.length) return;
     row.replaceChildren(h('span', { class: 'quick-label', text: 'Or start with:' }),
@@ -241,8 +281,8 @@ function privacyState(c) {
 }
 const PRIVACY_TEXT = { checking: 'Checking privacy...', unavailable: 'Privacy check not available' };
 
-// Card summaries of files flagged as PII use the same rule as the drawer's
-// Redacted view: browser-redacted text, or a short line. Cached per id + sha256.
+// Card summaries of files flagged as PII use the same rule as the Redacted view:
+// browser-redacted text, or a short line. Cached per id + sha256.
 const cardSummaries = new Map(); // key -> string | null (null: tried, not available)
 function cardSummary(c) {
   const ps = privacyState(c);
@@ -255,7 +295,7 @@ function cardSummary(c) {
     redactText(c.summary).then((text) => {
       if (text == null) return;
       cardSummaries.set(key, text);
-      document.querySelectorAll(`[data-id="${c.id}"].card .card-summary`).forEach((p) => { p.textContent = text; });
+      document.querySelectorAll(`[data-id="${c.id}"] .card-summary`).forEach((p) => { p.textContent = text; });
     });
   }
   return cardSummaries.get(key) ?? 'Summary hidden: personal data';
@@ -284,49 +324,58 @@ function safeView(c) {
       safeCache.set(key, out);
       const cur = cardObjs.get(c.id);
       if (cur) replaceCard(cur);
-      if (drawerFile?.id === c.id) {
-        const el = $('drawer-title');
-        if (el && document.querySelector('.seg [aria-pressed="true"]')?.textContent === 'Redacted') el.textContent = out.title;
-      }
+      if (state.sel === c.id) refreshSelected();
     });
   }
   return safeCache.get(key) ?? { title: c.name, keywords: [] };
 }
 
-function cardEl(c) {
-  cardObjs.set(c.id, c);
-  const safe = safeView(c);
-  const meta = c.client_meta ?? {};
-  const topics = (meta.topics ?? []).slice(0, 2);
-  const status = c.ai_status ?? 'fallback';
-  const statusText = { ok: 'AI summary: ok', fallback: 'Basic summary (AI was not used for this file)', error: 'AI step failed, basic summary used' }[status] ?? status;
+// ---------- items: one file as a filmstrip card, an icon, or a list row ----------
+function thumbEl(c) {
   const m = pct(c.match);
-  const el = h('article', { class: 'card', tabindex: '0', 'data-id': c.id, onclick: () => openDrawer(c.id),
-    onkeydown: (e) => { if (e.key === 'Enter' && e.target === el) openDrawer(c.id); } },
-  h('div', { class: 'card-top' },
-    h('div', { class: 'kind', text: KIND_ICON[c.kind] ?? '📄', title: c.kind }),
-    h('div', { style: 'min-width:0;flex:1' },
-      h('h3', { class: 'card-title', text: safe.title }),
-      h('div', { class: 'card-sub' }, h('span', { class: 'dot ' + status, title: statusText, 'aria-label': statusText }), h('span', { text: c.name }))),
-    m != null && h('span', { class: 'match', text: m + '%', title: 'How well this matches your search' })),
-  h('p', { class: 'card-summary', text: cardSummary(c) }),
-  (safe.keywords.length || topics.length || safe.checking) ? h('div', { class: 'tags' },
-    safe.checking && h('span', { class: 'tag', text: 'checking…' }),
-    topics.map((t) => h('span', { class: 'tag topic', text: t })),
-    safe.keywords.slice(0, 5).map((k) => h('span', { class: 'tag', text: k }))) : null,
-  (c.folders?.length || hasPii(c)) ? h('div', { class: 'chips' },
-    hasPii(c) && h('span', { class: 'pii', title: (meta.pii_types ?? []).join(', ') || 'Personal details found', text: '⚠ PII' }),
-    (c.folders ?? []).map((l) => chip(l))) : null,
-  h('div', { class: 'pathrow' },
-    h('div', { class: 'path', title: c.path }, h('span', { text: c.path })),
-    h('button', { class: 'btn btn-small', type: 'button', text: 'Copy', title: 'Copy the path', onclick: (e) => { e.stopPropagation(); copyPath(c.path); } })),
-  h('div', { class: 'card-actions' },
-    h('button', { class: 'btn btn-small', type: 'button', text: 'Reveal on Disk', onclick: (e) => { e.stopPropagation(); reveal(c.id); } })));
-  return el;
+  const flags = h('span', { class: 'flags' }, hasPii(c) && h('i', { title: 'Personal details found' }), isGuess(c) && h('i', { class: 'g', title: 'Best guess' }));
+  let t;
+  if (c.kind === 'image') t = h('span', { class: 'thumb thumb-image' }, icon('image', 30));
+  else if (c.kind === 'audio') t = h('span', { class: 'thumb thumb-audio' }, [10, 26, 16, 38, 22, 44, 18, 30, 12, 24].map((n) => h('i', { style: `height:${n}px` })));
+  else t = h('span', { class: 'thumb' }, h('p', { class: 'card-summary', text: cardSummary(c) }));
+  t.append(flags);
+  if (m != null) t.append(h('span', { class: 'pct', text: m + '%', title: 'How well this matches your search' }));
+  return t;
+}
+const statusText = (s) => ({ ok: 'AI summary: ok', fallback: 'Basic summary (AI was not used for this file)', error: 'AI step failed, basic summary used' }[s] ?? s);
+function fitOf(c) {
+  if (state.search) return pct(c.match);
+  const l = (c.folders ?? []).find((x) => x.folder_id === state.view) ?? c.folders?.[0];
+  return l ? pct(l.score) : null;
+}
+
+function itemEl(c) {
+  cardObjs.set(c.id, c);
+  const sel = state.sel === c.id;
+  const status = c.ai_status ?? 'fallback';
+  const dot = h('span', { class: 'dot ' + status, title: statusText(status), 'aria-label': statusText(status) });
+  const common = {
+    type: 'button', role: 'option', 'data-id': c.id, 'aria-selected': String(sel), tabindex: sel ? '0' : '-1',
+    onclick: () => selectFile(c.id), ondblclick: () => openQuick(),
+    onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); selectFile(c.id).then(openQuick); } },
+  };
+  if (state.layout === 'list') {
+    const top = c.folders?.[0];
+    const fit = fitOf(c);
+    return h('button', { ...common, class: 'row item' },
+      icon(kindIcon(c.kind), 16),
+      h('span', { class: 'nm' }, dot, h('span', { text: c.name, title: c.path })),
+      h('span', { class: 'mute', text: top ? `${top.emoji ?? ''} ${top.name}`.trim() : '' }),
+      h('span', { class: 'mute', text: fit != null ? fit + '%' : '' }),
+      h('span', { class: 'mute', text: fmtSize(c.size) }),
+      h('span', { class: 'flagtext' }, hasPii(c) && h('span', { class: 'pii', text: 'PII' }), isGuess(c) && h('span', { class: 'chip guess', text: 'Best guess' })));
+  }
+  return h('button', { ...common, class: 'card item', title: c.name },
+    thumbEl(c), h('span', { class: 'card-name' }, dot, h('span', { text: c.name })));
 }
 
 function replaceCard(c) {
-  document.querySelectorAll(`[data-id="${c.id}"].card`).forEach((old) => old.replaceWith(cardEl(c)));
+  document.querySelectorAll(`[data-id="${c.id}"].item`).forEach((old) => old.replaceWith(itemEl(c)));
 }
 
 async function copyPath(p) {
@@ -337,21 +386,80 @@ async function reveal(id) {
   catch (e) { toast(e.status === 410 ? 'That file is no longer on disk.' : e.message); }
 }
 
-// ---------- drawer ----------
-let drawerFile = null;
-async function openDrawer(id) {
-  const d = $('drawer');
-  d.hidden = false; $('scrim').hidden = false;
-  d.replaceChildren(h('div', { class: 'skeleton' }), h('div', { class: 'skeleton' }));
-  try {
-    drawerFile = await api.file(id);
-    renderDrawer('redacted');
-  } catch (e) {
-    d.replaceChildren(closeBtn(), h('div', { class: 'note err', text: 'Could not load this file: ' + e.message }));
-  }
+// ---------- selection, preview page, info pane ----------
+let drawerFile = null;   // the full file shown in the preview and the info pane
+let loadingId = null;
+
+function markSelected() {
+  document.querySelectorAll('#content .item').forEach((el) => {
+    const on = +el.dataset.id === state.sel;
+    el.setAttribute('aria-selected', String(on));
+    el.tabIndex = on ? 0 : -1;
+    if (on) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
 }
-function closeBtn() { return h('button', { class: 'btn btn-small drawer-close', type: 'button', text: 'Close ✕', onclick: closeDrawer }); }
-function closeDrawer() { $('drawer').hidden = true; $('scrim').hidden = true; drawerFile = null; }
+
+/** After a redraw: keep the selection if it is still listed, else select the first file. */
+function syncSelection(list) {
+  if (!list.length) { if (state.sel != null || drawerFile) { state.sel = null; drawerFile = null; loadingId = null; } renderStage(); renderInfo(); return; }
+  if (!list.some((c) => c.id === state.sel)) { selectFile(list[0].id); return; }
+  markSelected();
+  if (drawerFile?.id === state.sel || loadingId === state.sel) { renderStage(); renderInfo(); } else selectFile(state.sel, { force: true });
+}
+
+async function selectFile(id, { force = false } = {}) {
+  if (!force && id === state.sel && (drawerFile?.id === id || loadingId === id)) return;
+  if (id !== state.sel) setMode('redacted', false);   // every file opens covered
+  state.sel = id; drawerFile = null; loadingId = id;
+  markSelected(); renderStage(); renderInfo();
+  let f;
+  try { f = await api.file(id); }
+  catch (e) { f = { id, error: e.message }; }
+  if (state.sel !== id) return;   // a newer selection won
+  loadingId = null; drawerFile = f;
+  renderStage(); renderInfo(); renderQuick();
+}
+/** Redraw the preview and info pane for the selected file (privacy data just changed). */
+function refreshSelected() { renderStage(); renderInfo(); renderQuick(); }
+
+const REDACTION_TOKEN = /(\[[A-Z][A-Z_]*_\d+\])/;
+function withTokens(text) {
+  return text.split(REDACTION_TOKEN).map((part, i) => (i % 2 ? h('mark', { class: 'tok', text: part }) : part));
+}
+
+/** The file as a page: a document, a picture frame with its text, or a recording with its transcript. */
+function sheetEl(f) {
+  const card = cardObjs.get(f.id) ?? f;
+  const red = state.mode === 'redacted';
+  const meta = card.client_meta ?? f.client_meta ?? {};
+  const title = red ? safeView(card).title : (f.title || f.name);
+  let body;
+  if (red) {
+    const ps = privacyState(card);
+    body = meta.redacted_excerpt
+      ? h('pre', { class: 'sheet-body' }, withTokens(meta.redacted_excerpt))
+      : h('div', { class: 'sheet-body pending', text: ps === 'unavailable' ? PRIVACY_TEXT.unavailable : 'Privacy scan pending' });
+  } else {
+    body = h('pre', { class: 'sheet-body', text: f.text_excerpt || '(No text was read from this file.)' });
+  }
+  return h('article', { class: 'sheet sheet-' + f.kind },
+    h('h2', { class: 'sheet-title', text: title }),
+    h('div', { class: 'sheet-kind', text: KIND_LABEL[f.kind] ?? f.kind }),
+    f.kind === 'audio' && h('div', { class: 'wave', 'aria-hidden': 'true' },
+      Array.from({ length: 40 }, (_, i) => h('i', { style: `height:${Math.round(14 + Math.abs(Math.sin(i * 0.7 + f.id) * Math.cos(i * 0.23)) * 56)}px` }))),
+    body);
+}
+
+function renderStage() {
+  const box = $('stage');
+  if (!box) return;
+  box.replaceChildren();
+  const f = drawerFile;
+  if (!f) { box.append(h('div', { class: 'stage-empty', text: state.sel ? 'Opening…' : '' })); return; }
+  if (f.error) { box.append(h('div', { class: 'stage-empty', text: 'Could not load this file: ' + f.error })); return; }
+  if (state.mode === 'original') box.append(h('div', { class: 'stage-banner', text: 'Original text. It may contain personal details.' }));
+  box.append(sheetEl(f));
+}
 
 // Redacted view never shows the raw summary: it shows the Redact result, or a
 // short line while that is pending, unavailable or failed.
@@ -369,45 +477,88 @@ async function redactDrawerSummary(f) {
   if (text == null || drawerFile !== f) return;
   f.redactedSummary = text;
   const el = $('drawer-summary');
-  const redactedOn = document.querySelector('.seg [aria-pressed="true"]')?.textContent === 'Redacted';
-  if (el && redactedOn) el.textContent = text;
+  if (el && state.mode === 'redacted') el.textContent = text;
 }
 
-function renderDrawer(mode) {
+function closeInfo() { $('drawer').classList.remove('open'); }
+function renderInfo() {
+  const d = $('drawer');
+  d.replaceChildren(h('button', { class: 'btn btn-small info-close', type: 'button', text: 'Close ✕', onclick: closeInfo }));
   const f = drawerFile;
-  if (!f) return;
-  if (mode === 'redacted') redactDrawerSummary(f);
-  const meta = f.client_meta ?? {};
-  const redacted = meta.redacted_excerpt;
-  let excerpt;
-  if (mode === 'redacted') {
-    excerpt = redacted ? h('pre', { class: 'excerpt', text: redacted })
-      : h('div', { class: 'excerpt pending', text: 'Privacy scan pending' });
-  } else {
-    excerpt = h('pre', { class: 'excerpt', text: f.text_excerpt || '(No text was read from this file.)' });
-  }
-  const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Which version of the text to show' },
-    h('button', { type: 'button', 'aria-pressed': String(mode === 'redacted'), text: 'Redacted', onclick: () => renderDrawer('redacted') }),
-    h('button', { type: 'button', 'aria-pressed': String(mode === 'original'), text: 'Original', onclick: () => renderDrawer('original') }));
-  $('drawer').replaceChildren(...[
-    closeBtn(),
-    h('h2', { id: 'drawer-title', text: mode === 'redacted' ? safeView(cardObjs.get(f.id) ?? f).title : (f.title || f.name) }),
-    h('div', { class: 'chips' }, hasPii(f) && h('span', { class: 'pii', text: '⚠ PII: ' + ((meta.pii_types ?? []).join(', ') || 'personal details') }),
-      (f.folders ?? []).map((l) => chip(l))),
+  if (!state.sel) { d.append(h('p', { class: 'info-empty', text: 'Select a file to see its details.' })); return; }
+  if (!f) { d.append(h('div', { class: 'skeleton', style: 'height:60px;flex:none' }), h('div', { class: 'skeleton', style: 'height:110px;flex:none' })); return; }
+  if (f.error) { d.append(h('div', { class: 'note err', text: 'Could not load this file: ' + f.error })); return; }
+  const red = state.mode === 'redacted';
+  if (red) redactDrawerSummary(f);
+  const card = cardObjs.get(f.id) ?? f;
+  const meta = card.client_meta ?? f.client_meta ?? {};
+  const safe = safeView(card);
+  const keywords = red ? safe.keywords : (f.keywords ?? []);
+  const topics = (meta.topics ?? []).slice(0, 2);
+  const m = pct(card.match);
+  const status = f.ai_status ?? 'fallback';
+  d.append(...[
+    h('h2', { id: 'drawer-title', text: red ? safe.title : (f.title || f.name) }),
+    h('div', { class: 'sub', text: `${KIND_LABEL[f.kind] ?? f.kind} · ${fmtSize(f.size)}` }),
+    (hasPii(card) || f.folders?.length) ? h('div', { class: 'chips' },
+      hasPii(card) && h('span', { class: 'pii', title: (meta.pii_types ?? []).join(', ') || 'Personal details found', text: '⚠ PII: ' + ((meta.pii_types ?? []).join(', ') || 'personal details') }),
+      (f.folders ?? []).map((l) => chip(l))) : null,
     h('h3', { text: 'Summary' }),
-    h('p', { class: 'full', id: 'drawer-summary', text: summaryText(f, mode) }),
-    h('h3', { text: 'Text from the file' }),
-    seg,
-    mode === 'original' ? h('p', { class: 'warn-line', text: 'This is the original text and may contain personal details.' }) : null,
-    excerpt,
+    h('p', { class: 'full', id: 'drawer-summary', text: summaryText(f, state.mode) }),
+    red && safe.checking ? h('div', { class: 'tags' }, h('span', { class: 'tag', text: 'checking…' })) : null,
+    (keywords.length || topics.length) ? h('div', { class: 'tags' },
+      topics.map((t) => h('span', { class: 'tag topic', text: t })),
+      keywords.slice(0, 6).map((k) => h('span', { class: 'tag', text: k }))) : null,
+    state.mode === 'original' ? h('p', { class: 'warn-line', text: 'This is the original text and may contain personal details.' }) : null,
     h('h3', { text: 'Details' }),
     h('dl', { class: 'meta-grid' },
-      h('dt', { text: 'Path' }), h('dd', { class: 'code', style: 'padding:4px 8px', text: f.path }),
+      m != null ? [h('dt', { text: 'Match' }), h('dd', { text: m + '%' })] : null,
+      h('dt', { text: 'Path' }), h('dd', { class: 'code', text: f.path }),
       h('dt', { text: 'Type' }), h('dd', { text: f.kind }),
-      h('dt', { text: 'AI' }), h('dd', { text: { ok: 'Summarised by the AI model', fallback: 'Basic summary (AI not used)', error: 'AI failed, basic summary used' }[f.ai_status] ?? f.ai_status })),
-    h('div', { class: 'card-actions' },
-      h('button', { class: 'btn btn-small', type: 'button', text: 'Reveal on Disk', onclick: () => reveal(f.id) }),
-      h('button', { class: 'btn btn-small', type: 'button', text: 'Copy path', onclick: () => copyPath(f.path) }))].filter(Boolean));
+      h('dt', { text: 'AI' }), h('dd', { text: { ok: 'Summarised by the AI model', fallback: 'Basic summary (AI not used)', error: 'AI failed, basic summary used' }[status] ?? status })),
+    h('div', { class: 'info-actions' },
+      h('button', { class: 'btn btn-primary btn-small', type: 'button', onclick: () => reveal(f.id) }, icon('open', 14), 'Reveal on Disk'),
+      h('button', { class: 'btn btn-small', type: 'button', onclick: () => copyPath(f.path) }, icon('copy', 14), 'Copy path')),
+  ].filter(Boolean));
+}
+
+function setMode(mode, render = true) {
+  state.mode = mode;
+  $('mode-redacted').setAttribute('aria-pressed', String(mode === 'redacted'));
+  $('mode-original').setAttribute('aria-pressed', String(mode === 'original'));
+  if (render) refreshSelected();
+}
+
+// Full-size look at the selected file (Space).
+let quickOpen = false, quickFrom = null;
+function openQuick() {
+  if (!drawerFile || drawerFile.error) return;
+  quickFrom = document.activeElement; quickOpen = true;
+  $('quick').hidden = false; renderQuick();
+  $('quick').querySelector('.quick-close')?.focus();
+}
+function closeQuick() {
+  if (!quickOpen) return;
+  quickOpen = false; $('quick').hidden = true; $('quick').replaceChildren();
+  if (quickFrom?.isConnected) quickFrom.focus({ preventScroll: true });
+}
+function renderQuick() {
+  if (!quickOpen) return;
+  if (!drawerFile || drawerFile.error) { $('quick').replaceChildren(h('div', { class: 'stage-empty', style: 'color:#fff', text: 'Opening…' })); return; }
+  $('quick').replaceChildren(...[
+    h('button', { class: 'btn quick-close', type: 'button', onclick: closeQuick }, icon('x', 14), 'Close'),
+    state.mode === 'original' ? h('div', { class: 'stage-banner', text: 'Original text. It may contain personal details.' }) : null,
+    sheetEl(drawerFile)].filter(Boolean));
+}
+
+function setLayout(layout) {
+  state.layout = layout;
+  try { localStorage.setItem('veilfs-view', layout); } catch { /* ignore */ }
+  paintLayoutButtons();
+  renderContent();
+}
+function paintLayoutButtons() {
+  for (const l of LAYOUTS) $('v-' + l).setAttribute('aria-pressed', String(state.layout === l));
 }
 
 // ---------- search ----------
@@ -416,7 +567,7 @@ async function doSearch() {
   const q = $('q').value.trim();
   if (!q) { clearSearch(); return renderAll(); }
   state.query = q;
-  $('content').replaceChildren(h('div', { class: 'grid' }, [1, 2, 3].map(() => h('div', { class: 'skeleton' }))));
+  $('content').replaceChildren(h('div', { class: 'skeleton-strip' }, [1, 2, 3].map(() => h('div', { class: 'skeleton' }))));
   try {
     const r = await api.search(q);
     if ($('q').value.trim() !== q) return; // a newer search is running
@@ -544,10 +695,7 @@ async function startPrivacyPass() {
         const copies = [cur, cardObjs.get(id), ...(state.search ? [...state.search.results, ...state.search.weak].filter((x) => x.id === id) : [])];
         for (const x of new Set(copies.filter(Boolean))) x.client_meta = meta2 ?? x.client_meta;
         if (cur) replaceCard(cardObjs.get(id) ?? cur);
-        if (drawerFile?.id === id) {
-          const el = $('drawer-title');
-          if (el && document.querySelector('.seg [aria-pressed="true"]')?.textContent === 'Redacted') el.textContent = safeView(cardObjs.get(id) ?? cur).title;
-        }
+        if (state.sel === id) refreshSelected();
         clearTimeout(startPrivacyPass.t); startPrivacyPass.t = setTimeout(refreshFolders, 800);
       },
     });
@@ -584,6 +732,16 @@ $('theme-toggle').addEventListener('click', () => {
 });
 
 // ---------- boot ----------
+$('back').append(icon('chevL', 18));
+$('v-icons').append(icon('grid', 16)); $('v-list').append(icon('list', 16)); $('v-gallery').append(icon('gallery', 16));
+$('info-toggle').append(icon('info', 18));
+paintLayoutButtons();
+for (const l of LAYOUTS) $('v-' + l).addEventListener('click', () => setLayout(l));
+$('back').addEventListener('click', () => { state.view = 'all'; clearSearch(); renderAll(); });
+$('mode-redacted').addEventListener('click', () => setMode('redacted'));
+$('mode-original').addEventListener('click', () => setMode('original'));
+$('info-toggle').addEventListener('click', () => $('drawer').classList.toggle('open'));
+$('quick').addEventListener('click', (e) => { if (e.target === $('quick')) closeQuick(); });
 $('scan-form').addEventListener('submit', onScan);
 $('pick-btn').addEventListener('click', () => chooseFolder());
 // Drag and drop: the browser hides a dropped folder's location, so a drop opens the
@@ -603,8 +761,30 @@ $('new-folder').addEventListener('submit', onNewFolder);
 $('nf-name').addEventListener('input', onNameInput);
 $('nf-desc').addEventListener('input', onNameInput);
 $('nf-emoji').addEventListener('input', () => (emojiTouched = true));
-$('scrim').addEventListener('click', closeDrawer);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+
+// Keys work the way they do in a file manager: arrows walk the files, Space gives a full-size look,
+// "/" or Ctrl+F searches, Esc steps back.
+document.addEventListener('keydown', (e) => {
+  const typing = e.target.matches?.('input, textarea, select, [contenteditable]');
+  if (e.key === 'Escape') {
+    if (quickOpen) { closeQuick(); return; }
+    if ($('drawer').classList.contains('open')) { closeInfo(); return; }
+    if (state.search) { clearSearch(); renderAll(); }
+    return;
+  }
+  if ((e.key === 'f' && e.ctrlKey) || (e.key === '/' && !typing)) { e.preventDefault(); $('q').focus(); $('q').select(); return; }
+  if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+  const list = currentList();
+  if (e.key === ' ' && list.length && (!e.target.closest?.('button') || e.target.closest('.item'))) {
+    e.preventDefault(); if (quickOpen) closeQuick(); else openQuick(); return;
+  }
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && list.length) {
+    e.preventDefault();
+    const i = Math.max(0, list.findIndex((c) => c.id === state.sel));
+    const next = list[Math.min(list.length - 1, Math.max(0, i + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1)))];
+    if (next.id !== state.sel) selectFile(next.id).then(() => { if (!quickOpen) document.querySelector(`#content [data-id="${next.id}"]`)?.focus({ preventScroll: true }); });
+  }
+});
 try { $('root').value = localStorage.getItem('veilfs-root') ?? ''; } catch { /* ignore */ }
 applyThemeLabel();
 renderAll();

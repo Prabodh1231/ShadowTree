@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>ShadowTree: find your files by meaning, never touch them</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f6b66'/%3E%3Cpath d='M7 12h18M7 17h18M7 22h11' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b46d8'/%3E%3Cpath d='M7 12h18M7 17h18M7 22h11' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
   <script>
     // Apply the saved theme before first paint so there is no flash.
     try { var t = localStorage.getItem('veilfs-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
@@ -13,6 +13,27 @@
 </head>
 <body>
 <div class="app">
+  <header class="toolbar">
+    <button id="back" class="tb-btn" type="button" aria-label="Back to All Files" title="Back to All Files" hidden></button>
+    <div id="view-head" class="view-head"></div>
+    <div class="vs" role="group" aria-label="Layout">
+      <button id="v-icons" type="button" aria-label="Icons" title="Icons"></button>
+      <button id="v-list" type="button" aria-label="List" title="List"></button>
+      <button id="v-gallery" type="button" aria-label="Gallery" title="Gallery"></button>
+    </div>
+    <div class="tb-right">
+      <div id="mode-seg" class="seg" role="group" aria-label="Which version of the text to show">
+        <button id="mode-redacted" type="button" aria-pressed="true">Redacted</button>
+        <button id="mode-original" type="button" aria-pressed="false">Original</button>
+      </div>
+      <button id="info-toggle" class="tb-btn info-toggle" type="button" aria-label="Show file details" title="File details"></button>
+      <form id="search-form" class="search-form" role="search" autocomplete="off">
+        <label class="sr-only" for="q">Search your files</label>
+        <input id="q" type="search" placeholder="Search by meaning, e.g. money I spent">
+      </form>
+    </div>
+  </header>
+
   <aside class="sidebar" aria-label="Folders">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
@@ -22,49 +43,48 @@
       </div>
     </div>
     <nav id="folder-nav" class="folder-nav"></nav>
-    <form id="new-folder" class="new-folder" autocomplete="off">
-      <h2>New Virtual Folder</h2>
-      <p class="hint">Files are sorted into it by meaning. Nothing moves on disk.</p>
-      <div class="nf-row">
-        <input id="nf-emoji" class="emoji-input" maxlength="4" value="📁" aria-label="Folder emoji" title="Emoji (suggested for you, you can change it)">
-        <input id="nf-name" type="text" placeholder="Name, e.g. Travel plans" maxlength="60" required aria-label="Folder name">
-      </div>
-      <input id="nf-desc" type="text" placeholder="What goes in it? (optional)" maxlength="200" aria-label="Folder description">
-      <button class="btn btn-ghost" type="submit">Create folder</button>
-      <div id="nf-msg" class="hint" role="status"></div>
+
+    <details id="new-folder-box" class="side-box">
+      <summary>New virtual folder</summary>
+      <form id="new-folder" class="new-folder" autocomplete="off">
+        <p class="hint">Files are sorted into it by meaning. Nothing moves on disk.</p>
+        <div class="nf-row">
+          <input id="nf-emoji" class="emoji-input" maxlength="4" value="📁" aria-label="Folder emoji" title="Emoji (suggested for you, you can change it)">
+          <input id="nf-name" type="text" placeholder="Name, e.g. Travel plans" maxlength="60" required aria-label="Folder name">
+        </div>
+        <input id="nf-desc" type="text" placeholder="What goes in it? (optional)" maxlength="200" aria-label="Folder description">
+        <button class="btn" type="submit">Create folder</button>
+        <div id="nf-msg" class="hint" role="status"></div>
+      </form>
+    </details>
+
+    <form id="scan-form" class="scan-form side-box" autocomplete="off">
+      <h2>Folder on disk</h2>
+      <button id="pick-btn" class="btn" type="button" title="Open the Windows folder picker">📂 Choose folder…</button>
+      <label class="sr-only" for="root">Folder to index</label>
+      <input id="root" type="text" placeholder="…or paste a folder path" spellcheck="false">
+      <button id="scan-btn" class="btn btn-primary" type="submit">Index (Read-Only)</button>
+      <div class="readonly" title="ShadowTree opens your files read-only. It never writes, moves or deletes them.">🔒 Read-only: your files are never modified</div>
     </form>
+
     <div class="side-foot">
       <button id="theme-toggle" class="btn btn-quiet" type="button" aria-label="Switch light or dark mode">Dark mode</button>
       <a class="credit" href="https://desertant.com" target="_blank" rel="noopener noreferrer">Powered by Desert Ant Labs</a>
     </div>
   </aside>
 
-  <main class="main">
-    <header class="topbar">
-      <form id="scan-form" class="scan-form" autocomplete="off">
-        <button id="pick-btn" class="btn" type="button" title="Open the Windows folder picker">📂 Choose folder…</button>
-        <label class="sr-only" for="root">Folder to index</label>
-        <input id="root" type="text" placeholder="…or paste a folder path" spellcheck="false">
-        <button id="scan-btn" class="btn btn-primary" type="submit">Index (Read-Only)</button>
-      </form>
-      <form id="search-form" class="search-form" role="search" autocomplete="off">
-        <label class="sr-only" for="q">Search your files</label>
-        <input id="q" type="search" placeholder="Search by meaning, e.g. money I spent">
-      </form>
-      <div class="readonly" title="ShadowTree opens your files read-only. It never writes, moves or deletes them.">🔒 Read-only: your files are never modified</div>
-    </header>
+  <main class="center">
     <section id="progress" class="progress" hidden aria-live="polite">
       <div class="bar"><div id="bar-fill" class="bar-fill"></div></div>
       <div id="progress-text" class="progress-text"></div>
     </section>
     <div id="skipped" class="skipped" hidden></div>
     <div id="notes" class="notes"></div>
-    <div id="view-head" class="view-head"></div>
     <section id="content" class="content" aria-live="polite"></section>
   </main>
 
-  <aside id="drawer" class="drawer" hidden aria-label="File details"></aside>
-  <div id="scrim" class="scrim" hidden></div>
+  <aside id="drawer" class="info" aria-label="File details"></aside>
+  <div id="quick" class="quick" role="dialog" aria-modal="true" aria-label="Full-size look" hidden></div>
   <div id="toast" class="toast" role="status" hidden></div>
 </div>
 <script type="module" src="/src/main.js"></script>
