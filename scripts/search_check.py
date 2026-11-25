@@ -1,4 +1,4 @@
-r"""Real-model search check: index a fresh sample folder into a scratch DB, run 8 queries.
+r"""Real-model search check: index a fresh sample folder into a scratch DB, run 9 queries.
 
 Usage (PowerShell, from the repo root):
   backend\.venv\Scripts\python.exe scripts\search_check.py
@@ -20,7 +20,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 WORK = Path(tempfile.gettempdir()) / "st-fix2"
 QUERIES = ["tax documents", "volcano penguin", "invoice", "money I spent",
-           "pay the bill", "my diary", "coffee", "error message"]
+           "pay the bill", "my diary", "coffee", "error message", "meeting"]
 
 
 def main() -> int:
