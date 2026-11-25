@@ -1,13 +1,61 @@
-"""OCR seam (PP-OCRv5 mobile via rapidocr). Step 4 fills it in.
+"""OCR: PP-OCRv5 mobile (det + multilingual rec) through rapidocr, on onnxruntime.
+Verified calls only (docs/api_notes.md, "ShadowTree model stack").
 
-Until then `ocr_image` raises NotReady, so callers keep their no-OCR path.
+Loaded once, lazily, from backend/data/models/ocr, under the shared model lock. Explicit model
+paths, so rapidocr never downloads. A missing folder or a load failure raises NotReady.
 Tests monkeypatch `ocr_image` by name (see tests/conftest.py).
 """
 from __future__ import annotations
 
+from .ai_cactus import MODEL_LOCK
 from .ai_classify import NotReady
+from .config import apply_env, get_settings, model_dir
+
+DET = "ch_PP-OCRv5_det_mobile.onnx"
+REC = "ch_PP-OCRv5_rec_mobile.onnx"   # multilingual rec: read "0x8007..." right where the English one did not
+DICT = "ppocrv5_dict.txt"
+_state: dict = {"engine": None, "error": None}
 
 
-def ocr_image(data: bytes) -> list[str]:
-    """Text lines read from encoded image bytes (PNG/JPEG), top to bottom. Step 4 replaces this."""
-    raise NotReady("OCR is not ready (PP-OCRv5 arrives in Step 4)")
+def _load():
+    """Call with MODEL_LOCK held."""
+    if _state["engine"] is not None:
+        return _state["engine"]
+    if _state["error"]:
+        raise NotReady(_state["error"])
+    d = model_dir("ocr")
+    if not ((d / DET).is_file() and (d / REC).is_file()):
+        raise NotReady("OCR models are not downloaded: run scripts/download_models.py")  # may appear later
+    apply_env()
+    try:
+        from rapidocr import ModelType, OCRVersion, RapidOCR
+        params = {
+            "Det.model_path": str(d / DET), "Det.ocr_version": OCRVersion.PPOCRV5, "Det.model_type": ModelType.MOBILE,
+            "Rec.model_path": str(d / REC), "Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.model_type": ModelType.MOBILE,
+            "Global.log_level": "warning",
+            "EngineConfig.onnxruntime.intra_op_num_threads": get_settings().onnx_threads,
+        }
+        if (d / DICT).is_file():
+            params["Rec.rec_keys_path"] = str(d / DICT)
+        _state["engine"] = RapidOCR(params=params)
+    except Exception as exc:
+        _state["error"] = f"OCR failed to load: {type(exc).__name__}: {exc}"
+        raise NotReady(_state["error"]) from exc
+    return _state["engine"]
+
+
+def is_loaded() -> bool:
+    return _state["engine"] is not None
+
+
+def close() -> None:
+    _state["engine"] = None
+    _state["error"] = None
+
+
+def ocr_image(data) -> list[str]:
+    """Text lines, top to bottom, from encoded image bytes (PNG/JPEG) or a BGR uint8 ndarray.
+    [] when no text is found."""
+    with MODEL_LOCK:
+        out = _load()(data)
+    return [t.strip() for t in (getattr(out, "txts", None) or ()) if t and t.strip()]

@@ -19,6 +19,9 @@ from . import extractors as ex
 from .config import apply_env, get_settings
 
 MODEL_LOCK = threading.Lock()   # shared with ai_classify: one model call at a time
+OCR_PDF_MIN_CHARS = 50          # a PDF with less text than this from pypdf gets OCR
+OCR_PDF_PAGES, OCR_PDF_DPI = 3, 200
+EXTRACT_VERSION = "ocr-v1"      # files.ext_ver; images and thin PDFs with an older stamp are re-read
 
 NEEDLE_SCHEMA = {
     "name": "file_card",
@@ -193,6 +196,20 @@ def transcribe_audio(path: Path) -> str:
 
 # ---- the per-file card ------------------------------------------------------------
 
+def _ocr_img(data: bytes) -> list[str]:
+    from . import ai_ocr  # lazy: ai_ocr imports this module for MODEL_LOCK
+    return ai_ocr.ocr_image(data)
+
+
+def _ocr_pdf(data: bytes) -> list[str]:
+    """Render the first OCR_PDF_PAGES pages in memory and OCR each one."""
+    from . import ai_ocr
+    lines: list[str] = []
+    for img in ex.render_pdf_pages(data, pages=OCR_PDF_PAGES, dpi=OCR_PDF_DPI):
+        lines += ai_ocr.ocr_image(img)
+    return lines
+
+
 def build_card(path: Path, kind: str, name: str) -> dict:
     """Extract content, call Cactus where useful, merge per field with fallbacks.
 
@@ -203,7 +220,8 @@ def build_card(path: Path, kind: str, name: str) -> dict:
     notes: list[str] = []          # errors / reasons
     prov = {"title": "fallback", "summary": "fallback", "keywords": "fallback"}
     text = ""
-    source_model = None            # which model produced `text` (mirage / whistle)
+    source_model = None            # which model produced `text` (ocr / mirage / whistle)
+    ocr_state = None               # None (not run) | ok | empty | error
     meta_line = ""
     status_error = False
 
@@ -217,15 +235,41 @@ def build_card(path: Path, kind: str, name: str) -> dict:
             except ex.SoftFail as exc:
                 notes.append(str(exc))
                 meta_line = "PDF document"
+            if len(text.strip()) < OCR_PDF_MIN_CHARS:  # scanned or image-only PDF: OCR the first pages
+                try:
+                    lines = _ocr_pdf(ex.read_bytes(path, cfg.max_file_bytes))
+                    ocr_state = "ok" if lines else "empty"
+                    if lines:
+                        text = (text.strip() + "\n" if text.strip() else "") + "\n".join(lines)
+                        source_model = "ocr"
+                except Exception as exc:
+                    ocr_state = "error"
+                    notes.append(f"ocr: {type(exc).__name__}: {exc}")
         elif kind == "image":
             meta_line = ex.image_meta(path)
-            try:
-                text = describe_image(path)
-                source_model = "mirage"
-                if not text:
+            ocr_lines: list[str] = []
+            try:  # 1. OCR: the verbatim text (search and folders use it)
+                ocr_lines = _ocr_img(ex.read_bytes(path, cfg.max_file_bytes))
+                ocr_state = "ok" if ocr_lines else "empty"
+            except ex.ExtractError:
+                raise
+            except Exception as exc:
+                ocr_state = "error"
+                notes.append(f"ocr: {type(exc).__name__}: {exc}")
+            desc = ""
+            try:  # 2. Mirage: the visual description
+                desc = describe_image(path)
+                if not desc:
                     notes.append("image model returned nothing")
             except Exception as exc:
                 notes.append(f"image model: {type(exc).__name__}: {exc}")
+            if ocr_lines:
+                text = "Text in the image:\n" + "\n".join(ocr_lines)
+                source_model = "ocr"
+                if desc:
+                    text += "\n\nImage description:\n" + desc
+            elif desc:
+                text, source_model = desc, "mirage"
         elif kind == "audio":
             meta_line = ex.wav_meta(path)
             try:
@@ -270,7 +314,10 @@ def build_card(path: Path, kind: str, name: str) -> dict:
         else:
             prov["summary"] = "fallback(ungrounded)"
     ungrounded = prov["summary"] == "fallback(ungrounded)"  # the model summary was rejected
-    if not summary and text and source_model == "mirage":  # keep the OCR lines: they make it searchable
+    if not summary and text and source_model == "ocr" and kind == "image":  # the OCR lines make it searchable
+        lines = [l for l in text.split("\n\nImage description:")[0].splitlines()[1:] if l.strip()]
+        summary, prov["summary"] = ex.cut_text(" | ".join(lines), 300), "ocr"
+    elif not summary and text and source_model == "mirage":  # keep the OCR lines: they make it searchable
         summary, prov["summary"] = ex.cut_text(" | ".join(text.splitlines()), 300), source_model
     elif not summary and text and source_model:
         summary, prov["summary"] = ex.fallback_summary(text), source_model
@@ -288,12 +335,14 @@ def build_card(path: Path, kind: str, name: str) -> dict:
 
     if status_error:
         status = "error"
-    elif prov["title"] == "model" or prov["summary"] in ("model", "mirage", "whistle"):
-        status = "ok" if not any(n.startswith(("needle:", "image model:", "audio model:")) for n in notes) else "fallback"
+    elif prov["title"] == "model" or prov["summary"] in ("model", "mirage", "whistle", "ocr"):
+        status = "ok" if not any(n.startswith(("needle:", "image model:", "audio model:", "ocr:")) for n in notes) else "fallback"
     else:
         status = "fallback"
 
     note = "title:%s,summary:%s,keywords:%s" % (prov["title"], prov["summary"], prov["keywords"])
+    if ocr_state:
+        note = "ocr:" + ocr_state + "," + note   # provenance: OCR ran (ok / empty / error); first so a clip keeps it
     if status == "ok":  # ok means no error text: side notes go into the provenance (L5)
         ai_error = clip_error(note + "".join(",note:" + one_line(n, 60) for n in notes), 200)
     elif notes:

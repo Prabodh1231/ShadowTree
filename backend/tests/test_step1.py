@@ -14,6 +14,7 @@ def test_seams_raise_not_ready(tmp_path, monkeypatch):
     monkeypatch.setenv("VEILFS_DATA_DIR", str(tmp_path))   # empty data dir: no model folders, nothing loads
     ai_classify.close()
     ai_embed.close()
+    ai_ocr.close()
     with pytest.raises(ai_classify.NotReady):
         _ORIG["classify"]("t", ["a"])
     with pytest.raises(ai_classify.NotReady):

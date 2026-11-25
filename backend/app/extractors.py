@@ -65,6 +65,41 @@ def read_pdf(path: Path, max_pages: int) -> str:
     return text
 
 
+def read_bytes(path: Path, limit: int) -> bytes:
+    """The whole file, read-only, at most `limit` bytes (the scanner already skips bigger files)."""
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(limit)
+    except OSError as exc:
+        raise ExtractError(f"cannot read file: {exc}") from exc
+
+
+def render_pdf_pages(data: bytes, pages: int = 3, dpi: int = 200, max_pixels: int = 12_000_000) -> list:
+    """Render the first `pages` pages of a PDF given as bytes to BGR uint8 arrays, in memory only.
+    The scale is lowered per page so width x height stays under `max_pixels` (an A0 page at
+    200 dpi would be about 100 Mpx). pypdfium2 is imported lazily; nothing is written to disk."""
+    import io
+
+    import numpy as np
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(io.BytesIO(data))
+    out = []
+    try:
+        for i in range(min(pages, len(pdf))):
+            page = pdf[i]
+            w, h = page.get_size()                      # PDF points (1/72 inch)
+            scale = dpi / 72
+            if w * h * scale * scale > max_pixels:
+                scale = (max_pixels / (w * h)) ** 0.5
+            img = page.render(scale=scale).to_pil().convert("RGB")
+            out.append(np.asarray(img)[:, :, ::-1].copy())  # RGB -> BGR for rapidocr
+            page.close()
+    finally:
+        pdf.close()
+    return out
+
+
 def image_meta(path: Path) -> str:
     """Basic metadata line for an image (also verifies it opens)."""
     from PIL import Image

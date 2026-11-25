@@ -30,6 +30,14 @@ def block_external_sockets(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", guard)
 
 
+@pytest.fixture(autouse=True)
+def no_real_ocr(monkeypatch):
+    """Every test: OCR and PDF rendering are stubs (no rapidocr, no pypdfium2)."""
+    from app import extractors
+    monkeypatch.setattr(ai_ocr, "ocr_image", lambda data: ["OCR line one", "OCR line two"])
+    monkeypatch.setattr(extractors, "render_pdf_pages", lambda data, pages=3, dpi=200, max_pixels=0: [])
+
+
 class Calls:
     def __init__(self):
         self.structured = 0

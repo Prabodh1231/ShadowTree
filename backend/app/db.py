@@ -111,6 +111,8 @@ def migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE files ADD COLUMN vec BLOB")  # float32 potion vector, 256 * 4 bytes
     if "cls_ver" not in cols:
         conn.execute("ALTER TABLE files ADD COLUMN cls_ver TEXT")  # classifier version that wrote the links
+    if "ext_ver" not in cols:
+        conn.execute("ALTER TABLE files ADD COLUMN ext_ver TEXT")  # extractor version (OCR) that read the file
     conn.commit()
 
 
@@ -149,7 +151,7 @@ def upsert_file(conn: sqlite3.Connection, rec: dict) -> int:
     keywords = json.dumps(rec.get("keywords") or [], ensure_ascii=False)
     row = conn.execute("SELECT id FROM files WHERE path=?", (rec["path"],)).fetchone()
     cols = ("name", "ext", "kind", "size", "mtime", "sha256", "title", "summary",
-            "text_excerpt", "ai_status", "ai_error", "indexed_at")
+            "text_excerpt", "ai_status", "ai_error", "indexed_at", "ext_ver")
     vals = [rec.get(c) for c in cols]
     if row:
         fid = row["id"]

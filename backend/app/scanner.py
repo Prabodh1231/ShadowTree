@@ -95,6 +95,16 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def needs_reread(row) -> bool:
+    """Images, and PDFs with almost no text, read before OCR existed (no ext_ver stamp).
+    Re-reading runs the whole card again, so Mirage runs again for those images."""
+    if row["ext_ver"] == ai_cactus.EXTRACT_VERSION:
+        return False
+    if row["kind"] == "image":
+        return True
+    return row["kind"] == "pdf" and len((row["text_excerpt"] or "").strip()) < ai_cactus.OCR_PDF_MIN_CHARS + 20
+
+
 def classify_file(conn, file_id: int, folders: list, rec: dict) -> str:
     """Link the file to every topic folder scoring >= threshold, else Unsorted.
     Screenshots & Media is decided by file type (image or audio), not by the classifier.
@@ -188,12 +198,17 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
         seen.add(os.path.normcase(path_s))
         progress(current_file=p.name)
         try:
-            row = conn.execute("SELECT id, size, mtime, sha256 FROM files WHERE path=?", (path_s,)).fetchone()
-            if row and row["size"] == st.st_size and row["mtime"] == st.st_mtime:
+            row = conn.execute("SELECT id, size, mtime, sha256, kind, ext_ver, text_excerpt FROM files WHERE path=?",
+                               (path_s,)).fetchone()
+            if row and needs_reread(row):  # read before OCR existed: index again (Cactus runs again)
+                row_unchanged = False
+            else:
+                row_unchanged = bool(row) and row["size"] == st.st_size and row["mtime"] == st.st_mtime
+            if row_unchanged:
                 stats["skipped"] += 1
             else:
                 digest = sha256_file(p)
-                if row and row["sha256"] == digest:
+                if row and row["sha256"] == digest and not needs_reread(row):
                     conn.execute("UPDATE files SET size=?, mtime=? WHERE id=?", (st.st_size, st.st_mtime, row["id"]))
                     conn.commit()
                     stats["skipped"] += 1
@@ -201,7 +216,8 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
                     kind = SUPPORTED_EXTS[p.suffix.lower()]
                     card = ai_cactus.build_card(p, kind, p.name)
                     rec = {**card, "path": path_s, "name": p.name, "ext": p.suffix.lower(), "kind": kind,
-                           "size": st.st_size, "mtime": st.st_mtime, "sha256": digest, "indexed_at": _now()}
+                           "size": st.st_size, "mtime": st.st_mtime, "sha256": digest, "indexed_at": _now(),
+                           "ext_ver": ai_cactus.EXTRACT_VERSION}
                     fid = db.upsert_file(conn, rec)
                     if row:  # content changed: the browser-side privacy scan is stale
                         conn.execute("UPDATE files SET client_meta='{}' WHERE id=?", (fid,))

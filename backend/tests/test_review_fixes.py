@@ -246,7 +246,7 @@ def test_l5_ok_status_has_only_provenance(tmp_path, monkeypatch):
     monkeypatch.setattr(ai_cactus, "structured", lambda t: None)
     card = ai_cactus.build_card(f, "image", f.name)
     assert card["ai_status"] == "ok"
-    assert card["ai_error"].startswith("title:") and "|" not in card["ai_error"]
+    assert card["ai_error"].startswith("ocr:ok,title:") and "|" not in card["ai_error"]
     assert "needle empty" in card["ai_error"] and "note:" in card["ai_error"]
 
 

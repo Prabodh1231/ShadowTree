@@ -594,3 +594,8 @@ the whole build was 292 MB).
 - `ai_classify.classify(premise, hypotheses)` returns `softmax(logits)[entailment]` per hypothesis. Entailment index read from `config.json` `id2label` (0 for this model). Feed only the names in `session.get_inputs()` (`input_ids`, `attention_mask`). `Tokenizer.encode(premise, hypothesis)` with `enable_truncation(max_length=384, strategy="only_first")`. `SessionOptions.enable_cpu_mem_arena = False`, `intra_op_num_threads = ONNX_THREADS`.
 - Deviation: pairs run one `session.run` each, not padded batches. The quantized graph quantizes activations per batch, so padding changed scores (meeting notes vs Work & Research: 0.57 in a padded batch of 3, 0.79 alone). One pair takes about 25 to 30 ms on this PC.
 - Hypothesis: `This text is about {name}: {description}.` Long comma lists in the description scored far lower than short "or" phrases; the seed descriptions were re-tuned (table in `reports/shadowtree/step3.md`).
+### OCR in indexing (Step 4, verified)
+
+- Images: `ai_ocr.ocr_image(png_bytes)` (RapidOCR, PP-OCRv5 mobile det + `ch` rec, explicit paths) runs first, then Mirage. `text_excerpt` = `Text in the image:` + OCR lines, then `Image description:` + the Mirage text. Bytes come from `open(path, "rb")`.
+- PDFs with fewer than 50 characters from pypdf: `extractors.render_pdf_pages(bytes)` opens `pypdfium2.PdfDocument(io.BytesIO(data))`, renders the first 3 pages at 200 dpi (scale lowered so a page stays under 12 Mpx), `page.render(scale=...).to_pil()` to a BGR array, nothing on disk. `PdfPage.get_size()` returns points. Each page goes to `ocr_image`.
+- Provenance: `ai_error` starts with `ocr:ok` / `ocr:empty` / `ocr:error` when OCR ran; an OCR failure adds a note `ocr: <error>` and the file is still indexed.
