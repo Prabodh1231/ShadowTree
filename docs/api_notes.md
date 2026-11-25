@@ -15,8 +15,8 @@ headless Microsoft Edge 158.
 | Image description | `cactus.Mirage().describe(path)` | âš ï¸ works with caveats: no caption field, returns structured JSON |
 | Audio transcription | `cactus.transcribe(path)["text"]` | âœ… works, exactly as the spec assumed (16 kHz WAV) |
 | Structured extraction | `cactus.extract(text, schema)` / `cactus.Cactus(tools=[...])` (Needle 3) | âš ï¸ works with caveats: extractive only, often returns `None` |
-| Multi-label folder classification | `gliclass.ZeroShotClassificationPipeline` + `knowledgator/gliclass-v4-edge` | âœ… works on CPU (2.3 GB RAM in float32) |
-| Search rerank | same pipeline, query as the only label | âœ… works |
+| Multi-label folder classification | `gliclass.ZeroShotClassificationPipeline` + `knowledgator/gliclass-v4-edge` (removed in Step 1, now DeBERTa) | âœ… works on CPU (2.3 GB RAM in float32) |
+| Search rerank | same pipeline, query as the only label (removed in Step 1, now FlashRank) | âœ… works |
 | PII redaction (browser) | `Redact.load()` + `redaction(text)` | âš ï¸ works; mandatory license check, see [Desert Ant network calls](#network-calls-and-the-license-check) |
 | Topic tags (browser) | `Gist.load()` + `classify(text)` | âš ï¸ works; coarse 36-topic taxonomy, license check |
 | Emoji suggestion (browser) | `Emo.load()` + `suggestions(text)` | âš ï¸ works; license check |
@@ -226,7 +226,10 @@ when at least the title or summary came from the model, else `fallback`.
 
 ---
 
-## Knowledgator GLiClass (`gliclass==0.1.22`, model `knowledgator/gliclass-v4-edge`)
+## Knowledgator GLiClass (`gliclass==0.1.22`, model `knowledgator/gliclass-v4-edge`) (REMOVED in Step 1)
+
+> Removed: GLiClass, torch and transformers are gone from the code and the venv. Kept below as the Phase 0 record. The replacement is in [ShadowTree model stack](#shadowtree-model-stack-step-1-verified).
+
 
 - Dependencies pulled in: `torch==2.15.0` (CPU wheel), `transformers==5.24.1`,
   `scikit-learn`, `numpy`, `scipy`.
@@ -280,6 +283,101 @@ With `dtype=torch.bfloat16`: RSS 1.4 GB but 1.5 s per text (about 8x slower).
 Phase 1 default: float32, with an env override for low-memory machines.
 
 ---
+
+## ShadowTree model stack (Step 1, verified)
+
+All calls below ran for real in `spikes/shadowtree_spike.py` (Windows x64, Python 3.12.3, offline, 25 Nov 2026) after `scripts/download_models.py`. Replaces GLiClass. No torch, transformers or scikit-learn in the venv (414 MB).
+
+Pinned in `backend/requirements.txt`: `onnxruntime==1.32.0`, `tokenizers==0.23.3`, `model2vec==0.10.0`, `FlashRank==0.2.10`, `rapidocr==3.10.0`, `pypdfium2==5.15.2`, plus rapidocr's deps `opencv-python-headless==5.1.0.95`, `pyclipper==1.4.0`, `shapely==2.2.0`, `omegaconf==2.4.0`, `six`, `colorlog`, `requests`. `pip check`: clean. `safetensors` and `joblib` stay (model2vec needs them).
+
+### Where files live (`backend/data/models/`, set by `config.model_dir(name)`)
+
+| Folder | Files | Size |
+|---|---|---|
+| `deberta/` | `onnx/model_quantized.onnx` (87.25 MB), `tokenizer.json` (8.66 MB), `config.json` | 95.9 MB |
+| `potion-base-8M/` | `model.safetensors` (30.24 MB), `tokenizer.json` (0.68 MB), `config.json` | 30.9 MB |
+| `flashrank/ms-marco-TinyBERT-L-2-v2/` | `flashrank-TinyBERT-L-2-v2.onnx` (4.49 MB), `tokenizer.json`, `config.json`, 2 small json | 5.0 MB (the zip is unpacked with a `__MACOSX/` folder of empty stubs, ignore it) |
+| `ocr/` | `ch_PP-OCRv5_det_mobile.onnx` (4.82 MB), `ch_PP-OCRv5_rec_mobile.onnx` (16.63 MB), `ppocrv5_dict.txt` (0.07 MB) | 21.5 MB |
+
+Total new download: about 153 MB. Hosts: huggingface.co (DeBERTa, potion, FlashRank zip at `huggingface.co/prithivida/flashrank`) and modelscope.cn (OCR, SHA256 checked in `download_models.py`). Nothing is fetched at runtime: `HF_HUB_OFFLINE=1`, and `ai_classify.model_files_present()` checks the folders on disk (the `/health` `classifier.files_present` block).
+
+### DeBERTa NLI: `onnxruntime` + `tokenizers`
+
+```python
+import onnxruntime as ort
+from tokenizers import Tokenizer
+so = ort.SessionOptions(); so.intra_op_num_threads = get_settings().onnx_threads   # env ONNX_THREADS, default cores // 2
+sess = ort.InferenceSession(".../onnx/model_quantized.onnx", so, providers=["CPUExecutionProvider"])
+tok = Tokenizer.from_file(".../tokenizer.json")
+tok.enable_truncation(max_length=384, strategy="only_first")        # truncate the premise only
+tok.enable_padding(pad_id=tok.token_to_id("[PAD]") or 0, pad_token="[PAD]")
+enc = tok.encode_batch([(premise, hypothesis), ...])                 # pair: [CLS] premise [SEP] hypothesis [SEP]
+logits = sess.run(None, {"input_ids": int64 (n, L), "attention_mask": int64 (n, L)})[0]   # (n, 2) float32
+```
+
+- Graph inputs: `input_ids`, `attention_mask` only (both `int64`, shape `[batch_size, sequence_length]`). No `token_type_ids`. Output: `logits` `[batch_size, 2]`.
+- `config.json` `id2label` = `{"0": "entailment", "1": "not_entailment"}`: entailment is index 0. Read it from the file, do not hard-code. `max_position_embeddings` 512.
+- Score = `softmax(logits, axis=-1)[:, entailment_index]`.
+- Pair encoding confirmed: tokens start `[CLS] ▁Corner ▁Cafe ...`; `type_ids` are 0 for the premise (the model ignores them).
+- Load (session + tokenizer): 0.7 s. Run 2 pairs of about 60 tokens: 0.04 s. Spike result: coffee receipt text vs "This text is about receipts and payments." = 0.996 entailment; vs "...a personal diary." = 0.001.
+
+### potion: `model2vec`
+
+```python
+from model2vec import StaticModel
+m = StaticModel.from_pretrained(r"...\data\models\potion-base-8M")   # local folder, no network
+v = m.encode(["text", ...])        # np.ndarray (n, 256) float32
+```
+
+`from_pretrained(path, token=None, normalize=None, subfolder=None, quantize_to=None, dimensionality=None, vocabulary_quantization=None, max_length=<unset>, force_download=True)`. `encode(sentences, *, show_progress_bar=False, max_length=<unset>, normalize=None, batch_size=1024, use_multiprocessing=True, ...)`. Vectors are not unit length: normalise before cosine. Load 0.34 s, encode 3 short texts under 5 ms. Spike cosines: "money I spent" vs "coffee receipt total" 0.18, vs "walk by the lake" 0.00.
+
+### FlashRank
+
+```python
+from flashrank import Ranker, RerankRequest
+rk = Ranker(model_name="ms-marco-TinyBERT-L-2-v2", cache_dir=r"...\data\models\flashrank", log_level="WARNING")
+res = rk.rerank(RerankRequest(query="...", passages=[{"id": 0, "text": "..."}, ...]))
+# list of dicts {"id", "text", "score"} sorted by score, best first (score is a float in 0..1)
+```
+
+- Signatures: `Ranker(model_name='ms-marco-TinyBERT-L-2-v2', cache_dir='/tmp', max_length=512, log_level='INFO')`; `RerankRequest(query=None, passages=None)`.
+- `Ranker.__init__` downloads the zip from huggingface.co if `cache_dir/<model>` is missing, so the backend must check the folder first (Step 2). `log_level="WARNING"` stops its `logging.basicConfig` from chattering.
+- Load 0.05 s. Spike scores for query "money I spent": coffee receipt 0.0001, invoice 0.0000, diary 0.0000. So raw scores are tiny and `match = score * 100` will not work for this query; Step 2 must rescale (rank-based or sigmoid on the logit) and re-tune `MIN_MATCH` and `TOP_FLOOR`.
+
+### RapidOCR (PP-OCRv5 mobile, explicit model paths)
+
+```python
+from rapidocr import ModelType, OCRVersion, RapidOCR
+eng = RapidOCR(params={
+    "Det.model_path": ".../ch_PP-OCRv5_det_mobile.onnx", "Det.ocr_version": OCRVersion.PPOCRV5, "Det.model_type": ModelType.MOBILE,
+    "Rec.model_path": ".../ch_PP-OCRv5_rec_mobile.onnx", "Rec.rec_keys_path": ".../ppocrv5_dict.txt",
+    "Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.model_type": ModelType.MOBILE,
+    "Global.log_level": "warning", "EngineConfig.onnxruntime.intra_op_num_threads": 2})
+out = eng(png_bytes_or_ndarray_or_path)    # RapidOCROutput
+out.txts     # tuple[str], one per line, top to bottom (None when nothing found)
+out.scores   # tuple[float]
+```
+
+- `RapidOCR(config_path=None, params=None)`. Keys are dotted `Section.key`; `ocr_version`, `model_type`, `engine_type`, `task_type` must be the Enum, not a string (a string raises `TypeError: ... must be Enum Type`). Unknown keys raise `ValueError`.
+- The wheel ships PP-OCRv6 small models (det 9.9 MB, rec 21 MB) and uses them by default. Passing `*.model_path` selects the v5 files, so nothing is downloaded at runtime. The onnx rec model carries its own character list; `rec_keys_path` is accepted and harmless.
+- Model choice (owner named PP-OCRv5 mobile): tested `en_PP-OCRv5_rec_mobile` (7.9 MB) and `ch_PP-OCRv5_rec_mobile` (16.6 MB) on the sample screenshot. English read "Error code Ox80070005" (letter O). Multilingual `ch` read "0x80070005" correctly and also reads English, so the `ch` rec model is the one used. The English files were deleted again.
+- Screenshot result (`Screenshot 2026-11-20.png`): `Error | Payment failed | Could not save your invoice. | Error code 0x80070005: access denied. | Retry`, scores 0.94 to 1.0. First call (includes lazy session load) 0.8 to 1.0 s.
+- Fallback if the ModelScope download ever fails: omit `*.model_path` and the bundled PP-OCRv6 small models run. Not needed in this run (download and SHA256 passed).
+
+### pypdfium2
+
+```python
+import io, pypdfium2 as pdfium
+pdf = pdfium.PdfDocument(io.BytesIO(data))     # data = open(path, "rb").read(): keeps the read-only rule literal
+page = pdf[0]; img = page.render(scale=200/72).to_pil()    # PIL image, in memory, nothing written
+pdf.close()
+```
+
+`PdfDocument(input, password=None, autoclose=False)`. `len(pdf)` is the page count. Invoice sample page 1 at 200 dpi: 1654 x 2339 px in 0.04 s. RapidOCR on that array (BGR `np.ndarray`) read the invoice lines correctly ("Invoice 2041", "From: Northwind Supplies...", the line items). Cap pages and pixel size before rendering (Step 4).
+
+### Seams kept at this commit
+
+`ai_classify.classify(text, labels)` and `ai_classify.rerank(query, passages)` raise `ai_classify.NotReady` until Steps 3 and 2. New seams `ai_embed.embed(texts)` and `ai_ocr.ocr_image(bytes)` raise it too. Tests monkeypatch all four by name.
 
 ## Desert Ant Labs (browser builds) + LiteRT.js
 
