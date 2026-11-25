@@ -1,5 +1,5 @@
 /* ShadowTree: a gallery-view file window. One big preview, a filmstrip, an info pane, folders on the left.
-   Black in dark mode, cool grey in light mode, one green accent, paper-white pages. System fonts only (nothing loads from the web). */
+   Black in dark mode, cool grey in light mode, one amber accent, paper-white pages. System fonts only (nothing loads from the web). */
 :root {
   --bg: #e9ebf0;
   --panel: #dfe2e9;
@@ -7,9 +7,9 @@
   --ink: #1d2028;
   --ink-2: #5b6170;
   --line: #c9cdd8;
-  --accent: #2f7d4f;
+  --accent: #a85d00;
   --accent-ink: #ffffff;
-  --accent-soft: #d8eedf;
+  --accent-soft: #f6e4c2;
   --warn: #8a5300;
   --warn-soft: #f7e6c4;
   --bad: #a3174a;
@@ -27,7 +27,7 @@
 }
 :root[data-theme="dark"] {
   --bg: #000000; --panel: #0b0b0c; --card: #121214; --ink: #ececf0; --ink-2: #9a9ea8;
-  --line: #26272c; --accent: #6fcf93; --accent-ink: #0b2014; --accent-soft: #1d3a29;
+  --line: #26272c; --accent: #f5a623; --accent-ink: #2a1800; --accent-soft: #3d2d0e;
   --warn: #ffd27a; --warn-soft: #3a2c10; --bad: #ff9ac0; --bad-soft: #3a1a28; --ok: #6fcf93;
   --paper: #fbf9f4; --paper-ink: #26231d;
   --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
@@ -37,7 +37,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #000000; --panel: #0b0b0c; --card: #121214; --ink: #ececf0; --ink-2: #9a9ea8;
-    --line: #26272c; --accent: #6fcf93; --accent-ink: #0b2014; --accent-soft: #1d3a29;
+    --line: #26272c; --accent: #f5a623; --accent-ink: #2a1800; --accent-soft: #3d2d0e;
     --warn: #ffd27a; --warn-soft: #3a2c10; --bad: #ff9ac0; --bad-soft: #3a1a28; --ok: #6fcf93;
     --paper: #fbf9f4; --paper-ink: #26231d;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
@@ -161,7 +161,7 @@ input::placeholder { color: color-mix(in srgb, var(--ink-2) 80%, transparent); }
 .sheet-image .sheet-kind { color: #4a566a; }
 .sheet-image .sheet-body { background: rgba(255, 255, 255, .82); border-radius: 3px; padding: 14px 16px; }
 .wave { display: flex; align-items: center; gap: 3px; height: 78px; margin: 4px 0 16px; }
-.wave i { width: 4px; border-radius: 2px; background: #2f7d4f; }
+.wave i { width: 4px; border-radius: 2px; background: #a85d00; }
 .stage-empty { color: var(--ink-2); text-align: center; }
 
 /* Filmstrip items and icon-view items share one look */
@@ -172,7 +172,7 @@ input::placeholder { color: color-mix(in srgb, var(--ink-2) 80%, transparent); }
 .card-summary { margin: 0; font: 6px/1.5 var(--mono); color: #6a6559; overflow: hidden; word-break: break-word; max-height: 100%; }
 .thumb-image { background: linear-gradient(160deg, #cdd7e2, #8d9bb0); display: grid; place-items: center; color: #4a566a; }
 .thumb-audio { display: flex; align-items: center; justify-content: center; gap: 2px; }
-.thumb-audio i { width: 3px; border-radius: 2px; background: #2f7d4f; }
+.thumb-audio i { width: 3px; border-radius: 2px; background: #a85d00; }
 .flags { position: absolute; right: 4px; top: 4px; display: flex; gap: 3px; }
 .flags i { width: 9px; height: 9px; border-radius: 50%; background: #d63c7a; }
 .flags i.g { background: #e8a317; }
