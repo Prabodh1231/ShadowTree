@@ -1,24 +1,25 @@
-"""GLiClass wrapper: folder classification and search rerank. Verified calls only
-(docs/api_notes.md). `torch` and `gliclass` are imported lazily, after apply_env().
+"""Folder classification and search rerank seam (Steps 2 and 3 fill it in).
 
-The load happens once, lazily, on first use, under the shared model lock. A load
-failure is cached so it is not retried (and re-allocated) for every file.
+Step 1 removed GLiClass and torch. Until DeBERTa (Step 3) and FlashRank (Step 2) are wired,
+`classify` and `rerank` raise `NotReady`. The scanner catches that and puts the file in
+Unsorted, and search stays BM25-only. The names below are the seam the tests monkeypatch.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
-from .ai_cactus import MODEL_LOCK, ModelTimeout  # one lock for every model call
-from .config import GLICLASS_MODEL_ID, apply_env, get_settings
+from .ai_cactus import MODEL_LOCK, ModelTimeout  # noqa: F401  (one lock for every model call)
+from .config import get_settings, model_dir
 
 MAX_LABELS = 25
-RERANK_PROMPT = "Does the document match the search query?"
 
-_state: dict = {"pipe": None, "error": None, "dtype": None}
+_state: dict = {"pipe": None, "error": None}
 
 
 class Busy(Exception):
     """The model lock was not free within the wait time."""
+
+
+class NotReady(RuntimeError):
+    """The model for this step is not wired in yet (or not downloaded)."""
 
 
 def is_loaded() -> bool:
@@ -29,66 +30,18 @@ def load_error() -> str | None:
     return _state["error"]
 
 
-def used_dtype() -> str | None:
-    return _state["dtype"]
-
-
-def _load():
-    """Call with MODEL_LOCK held."""
-    if _state["pipe"] is not None:
-        return _state["pipe"]
-    if _state["error"]:
-        raise RuntimeError(f"GLiClass unavailable: {_state['error']}")
-    cfg = get_settings()
-    apply_env()
-    try:
-        import torch
-        from gliclass import GLiClassModel, ZeroShotClassificationPipeline
-        torch.set_num_threads(cfg.torch_threads)
-        dtype = getattr(torch, cfg.gliclass_dtype)
-        model = GLiClassModel.from_pretrained(GLICLASS_MODEL_ID, dtype=dtype).eval()
-        pipe = ZeroShotClassificationPipeline(
-            model, GLICLASS_MODEL_ID, max_classes=MAX_LABELS, max_length=1024,
-            classification_type="multi-label", device="cpu", progress_bar=False)
-    except BaseException as exc:  # incl. MemoryError, missing files in offline mode
-        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
-            raise
-        _state["error"] = f"{type(exc).__name__}: {exc}"
-        raise RuntimeError(f"GLiClass failed to load: {exc}") from exc
-    _state["pipe"], _state["dtype"] = pipe, cfg.gliclass_dtype
-    return pipe
-
-
 def close() -> None:
     _state["pipe"] = None
 
 
 def classify(text: str, labels: list[str]) -> list[float]:
-    """Score `text` against `labels` (unique strings). Returns one score per label,
-    in order. Labels are sent in batches of at most 25; the lock is taken per batch."""
-    scores: dict[str, float] = {}
-    for i in range(0, len(labels), MAX_LABELS):
-        batch = labels[i:i + MAX_LABELS]
-        with MODEL_LOCK:
-            pipe = _load()
-            res = pipe([text], batch, threshold=0.0, batch_size=1)
-        for p in res[0]:
-            scores[p["label"]] = float(p["score"])
-    return [scores.get(l, 0.0) for l in labels]
+    """One score (0..1) per label. Step 3 replaces this with DeBERTa NLI."""
+    raise NotReady("the folder classifier is not ready (DeBERTa arrives in Step 3)")
 
 
 def rerank(query: str, passages: list[str], wait: float | None = None) -> list[float]:
-    """Raw GLiClass score per passage for the query as the only label."""
-    if wait is None:
-        wait = get_settings().search_lock_wait_s
-    if not MODEL_LOCK.acquire(timeout=wait):
-        raise Busy("models are busy")
-    try:
-        pipe = _load()
-        res = pipe(passages, [query], prompt=RERANK_PROMPT, threshold=0.0, batch_size=4)
-    finally:
-        MODEL_LOCK.release()
-    return [float(r[0]["score"]) if r else 0.0 for r in res]
+    """One relevance score per passage. Step 2 replaces this with FlashRank."""
+    raise NotReady("the reranker is not ready (FlashRank arrives in Step 2)")
 
 
 def unique_labels(items: list[tuple[int, str, str | None]]) -> list[tuple[int, str]]:
@@ -112,9 +65,17 @@ def classifier_text(title: str, summary: str, keywords: list[str], excerpt: str)
 
 # ---- presence checks (disk only, never load a model) --------------------------------
 
-def gliclass_files_present() -> dict:
-    d = get_settings().data_dir / "hf" / "hub" / ("models--" + GLICLASS_MODEL_ID.replace("/", "--")) / "snapshots"
-    return {GLICLASS_MODEL_ID: d.is_dir() and any(d.glob("*/model.safetensors"))}
+def model_files_present() -> dict:
+    """{"<model>": bool} for the non-Cactus models."""
+    return {
+        "deberta": all((model_dir("deberta") / f).is_file()
+                       for f in ("onnx/model_quantized.onnx", "tokenizer.json", "config.json")),
+        "potion": all((model_dir("potion-base-8M") / f).is_file()
+                      for f in ("config.json", "model.safetensors", "tokenizer.json")),
+        "flashrank": (model_dir("flashrank") / "ms-marco-TinyBERT-L-2-v2").is_dir(),
+        "ocr": all((model_dir("ocr") / f).is_file()
+                   for f in ("ch_PP-OCRv5_det_mobile.onnx", "ch_PP-OCRv5_rec_mobile.onnx")),
+    }
 
 
 def cactus_files_present() -> dict:

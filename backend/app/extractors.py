@@ -1,7 +1,7 @@
 """Read-only content extraction plus the non-AI fallbacks (title, summary, keywords).
 
 Every file is opened with open(path, "rb") or a read-only library call. No models here,
-so this module is safe to import and test without torch, gliclass or cactus.
+so this module is safe to import and test without onnxruntime or cactus.
 """
 from __future__ import annotations
 

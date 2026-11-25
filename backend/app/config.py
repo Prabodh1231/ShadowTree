@@ -2,7 +2,8 @@
 
 `get_settings()` is cheap and re-reads the environment on every call, so tests can
 monkeypatch env vars. `apply_env()` must run before anything imports `cactus` or
-`gliclass` (both are imported lazily, inside functions, for that reason).
+`onnxruntime`, `model2vec`, `flashrank` or `rapidocr` (all are imported lazily, inside
+functions, for that reason).
 """
 from __future__ import annotations
 
@@ -20,7 +21,11 @@ ALLOWED_ORIGINS = [
 ]
 ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
-GLICLASS_MODEL_ID = "knowledgator/gliclass-v4-edge"
+DEBERTA_REPO = "MoritzLaurer/deberta-v3-xsmall-zeroshot-v1.1-all-33"
+DEBERTA_FILES = ["onnx/model_quantized.onnx", "tokenizer.json", "config.json"]
+POTION_REPO = "minishlab/potion-base-8M"
+POTION_FILES = ["config.json", "model.safetensors", "tokenizer.json"]
+FLASHRANK_MODEL = "ms-marco-TinyBERT-L-2-v2"
 SUPPORTED_EXTS = {".txt": "text", ".md": "text", ".pdf": "pdf", ".png": "image",
                   ".jpg": "image", ".jpeg": "image", ".wav": "audio"}
 SKIP_DIR_NAMES = {"node_modules", ".git"}
@@ -47,8 +52,7 @@ class Settings:
     classify_threshold: float
     max_file_bytes: int
     pdf_max_pages: int
-    gliclass_dtype: str
-    torch_threads: int
+    onnx_threads: int              # onnxruntime intra-op threads, about half the cores
     search_lock_wait_s: float      # how long /search waits for the model lock
     model_timeout_s: float         # soft timeout (measured, cannot interrupt)
     excerpt_chars: int
@@ -64,8 +68,7 @@ def get_settings() -> Settings:
         classify_threshold=_float("CLASSIFY_THRESHOLD", 0.5),
         max_file_bytes=_int("MAX_FILE_MB", 25) * 1024 * 1024,
         pdf_max_pages=_int("PDF_MAX_PAGES", 10),
-        gliclass_dtype=os.environ.get("GLICLASS_DTYPE", "float32"),
-        torch_threads=_int("TORCH_THREADS", max(1, (os.cpu_count() or 2) // 2)),
+        onnx_threads=_int("ONNX_THREADS", max(1, (os.cpu_count() or 2) // 2)),
         search_lock_wait_s=_float("SEARCH_LOCK_WAIT_S", 5.0),
         model_timeout_s=_float("MODEL_TIMEOUT_S", 60.0),
         excerpt_chars=_int("EXCERPT_CHARS", 2000),
@@ -74,7 +77,7 @@ def get_settings() -> Settings:
 
 
 def apply_env(allow_download: bool = False) -> None:
-    """Force the privacy and cache variables. Call before importing cactus or gliclass.
+    """Force the privacy and cache variables. Call before importing cactus or any model package.
 
     Values are assigned (not setdefault) so a shell with HF_HUB_OFFLINE=0 cannot undo them.
     Only scripts/download_models.py passes allow_download=True.
@@ -88,11 +91,15 @@ def apply_env(allow_download: bool = False) -> None:
     os.environ["HF_HOME"] = str(data / "hf")
     os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
     os.environ["HF_HUB_VERBOSITY"] = "error"
-    os.environ["TRANSFORMERS_VERBOSITY"] = "error"
     if allow_download:
         os.environ.pop("HF_HUB_OFFLINE", None)
     else:
         os.environ["HF_HUB_OFFLINE"] = "1"
+
+
+def model_dir(name: str) -> Path:
+    """Where download_models.py puts a model: backend/data/models/<name>."""
+    return get_settings().data_dir / "models" / name
 
 
 def is_inside(child: Path, parent: Path) -> bool:

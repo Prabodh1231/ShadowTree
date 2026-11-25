@@ -1,7 +1,7 @@
-"""Search: FTS5 BM25 prefilter, GLiClass rerank, blended `match` percentage.
+"""Search: FTS5 BM25 prefilter, reranker rerank, blended `match` percentage.
 
 Final formula (documented in docs/review/phase-1.md):
-  score      = raw GLiClass score for the query as the only label (0..1)
+  score      = raw reranker score for the query as the only label (0..1)
   bm25_norm  = 0..1 across the FTS hits (1 = best hit); 0 for non-FTS candidates
   match      = round(100 * (0.7 * score / max(top_score, 0.15) + 0.3 * bm25_norm)) + boost, clamped 0..100
   (no FTS hit at all: weights 1.0 / 0.0, so the best semantic hit shows 100)
@@ -95,7 +95,7 @@ def search(conn, q: str) -> dict:
                                              json.loads(rows[i]["keywords"] or "[]"),
                                              rows[i]["text_excerpt"] or "") for i in ids]
         scores = dict(zip(ids, _rerank_batches(q, texts)))
-    except Exception:  # missing, failing or busy GLiClass: BM25 only
+    except Exception:  # missing, failing or busy reranker: BM25 only
         scores = None
 
     boost = {i: name_boost(q, rows[i]["name"] or "", rows[i]["title"] or "") for i in ids}

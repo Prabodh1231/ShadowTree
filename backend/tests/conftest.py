@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import ai_cactus, ai_classify, db, jobs
+import numpy as np
+
+from app import ai_cactus, ai_classify, ai_embed, ai_ocr, db, jobs
 
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
@@ -70,7 +72,20 @@ def calls(monkeypatch):
     monkeypatch.setattr(ai_classify, "classify", classify)
     monkeypatch.setattr(ai_classify, "rerank",
                         lambda q, passages, wait=None: [0.9 if "invoice" in p.lower() else 0.05 for p in passages])
+    def embed(texts):
+        """Fixed 256-d vectors: same text, same vector; no model."""
+        out = np.zeros((len(texts), 256), dtype=np.float32)
+        for i, s in enumerate(texts):
+            out[i, hash_slot(s)] = 1.0
+        return out
+
+    monkeypatch.setattr(ai_embed, "embed", embed)
+    monkeypatch.setattr(ai_ocr, "ocr_image", lambda data: ["OCR line one", "OCR line two"])
     return c
+
+
+def hash_slot(s: str) -> int:
+    return sum(map(ord, s.lower())) % 256
 
 
 @pytest.fixture

@@ -167,7 +167,7 @@ def test_bad_host_and_origin_rejected(client):
 
 def test_health_loads_nothing(client):
     h = client.get("/health").json()
-    assert h["gliclass"]["loaded"] is False
+    assert h["classifier"]["loaded"] is False
     assert set(h["cactus"]["files_present"]) == {"needle3", "whistle", "mirage"}
 
 

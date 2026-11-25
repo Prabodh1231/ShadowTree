@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from . import ai_cactus, ai_classify, db, jobs, picker, search as search_mod
 from .config import ALLOWED_HOSTS, ALLOWED_ORIGINS, apply_env, get_settings, is_inside
 
-apply_env()  # before anything can import cactus or gliclass (they are imported lazily)
+apply_env()  # before anything can import cactus or a model package (they are imported lazily)
 
 
 @asynccontextmanager
@@ -81,7 +81,7 @@ class ClientMetaBody(Body):
 def health():
     """Never loads a model: flags come from memory, presence from a disk check."""
     cactus_files = ai_classify.cactus_files_present()
-    gli_present = ai_classify.gliclass_files_present()
+    present = ai_classify.model_files_present()
     fl = ai_cactus.loaded_flags()
     hint = "run scripts/download_models.py"
     return {
@@ -90,10 +90,9 @@ def health():
         "cactus": {"loaded": fl["cactus"], "files_present": cactus_files,
                    "load_errors": fl["failed"],
                    "hint": None if all(cactus_files.values()) else hint},
-        "gliclass": {"loaded": ai_classify.is_loaded(), "files_present": gli_present,
-                     "dtype": ai_classify.used_dtype() or get_settings().gliclass_dtype,
-                     "load_error": ai_classify.load_error(),
-                     "hint": None if all(gli_present.values()) else hint},
+        "classifier": {"loaded": ai_classify.is_loaded(), "files_present": present,
+                       "load_error": ai_classify.load_error(),
+                       "hint": None if all(present.values()) else hint},
         "job": jobs.status()["state"],
     }
 

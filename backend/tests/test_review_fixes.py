@@ -254,12 +254,12 @@ def test_l5_ok_status_has_only_provenance(tmp_path, monkeypatch):
 
 def test_l6_files_present_shape_on_both_stacks(client, monkeypatch):
     h = client.get("/health").json()
-    for stack in ("cactus", "gliclass"):
+    for stack in ("cactus", "classifier"):
         fp = h[stack]["files_present"]
         assert fp and all(isinstance(k, str) and isinstance(v, bool) for k, v in fp.items())
     assert set(h["cactus"]["files_present"]) == {"needle3", "whistle", "mirage"}
-    assert set(h["gliclass"]["files_present"]) == {"knowledgator/gliclass-v4-edge"}
-    assert h["gliclass"]["hint"] and h["cactus"]["hint"]          # nothing downloaded in the test data dir
+    assert set(h["classifier"]["files_present"]) == {"deberta", "potion", "flashrank", "ocr"}
+    assert h["classifier"]["hint"] and h["cactus"]["hint"]          # nothing downloaded in the test data dir
 
 
 def test_n10_cactus_needs_the_engine_dll(client):
