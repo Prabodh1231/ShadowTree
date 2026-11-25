@@ -1,4 +1,4 @@
-"""Make the VeilFS sample folder: 8 messy files with FAKE data only.
+"""Make the ShadowTree sample folder: 8 messy files with FAKE data only.
 
 Usage (PowerShell):
   backend\\.venv\\Scripts\\python.exe scripts\\make_samples.py [target folder]

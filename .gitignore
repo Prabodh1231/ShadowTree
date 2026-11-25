@@ -30,3 +30,6 @@ desktop.ini
 
 # Generated sample data
 sample_messy_folder/
+
+# Rendered demo video (upload to YouTube/Devpost, not git)
+demo-video/

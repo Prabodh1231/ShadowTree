@@ -25,7 +25,7 @@ root.attributes("-topmost", True)
 root.update()
 initial = sys.argv[1] if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]) else os.path.expanduser("~")
 path = filedialog.askdirectory(parent=root, initialdir=initial, mustexist=True,
-                               title="Choose a folder for Shadow Tree to read (your files stay untouched)")
+                               title="Choose a folder for ShadowTree to read (your files stay untouched)")
 root.destroy()
 if path:
     sys.stdout.write(os.path.normpath(path))

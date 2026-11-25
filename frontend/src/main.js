@@ -106,7 +106,7 @@ function renderHead() {
   if (!state.cards.length) return;
   const f = state.folders.find((x) => x.id === state.view);
   head.append(h('h1', { text: f ? `${f.emoji ?? ''} ${f.name}`.trim() : 'All Files' }),
-    h('p', { text: f?.description || 'Every file VeilFS has read, in one place.' }));
+    h('p', { text: f?.description || 'Every file ShadowTree has read, in one place.' }));
 }
 
 function visibleCards() {
@@ -157,7 +157,7 @@ function emptyState() {
   return h('div', { class: 'state' },
     h('div', { class: 'big', text: '🗂️' }),
     h('h2', { text: 'Find any file by what it says, not what it’s called' }),
-    h('p', { text: 'VeilFS reads your files and sorts them into virtual folders. Your real files are never moved, changed or deleted.' }),
+    h('p', { text: 'ShadowTree reads your files and sorts them into virtual folders. Your real files are never moved, changed or deleted.' }),
     h('button', { class: 'btn btn-primary btn-big', type: 'button', onclick: () => chooseFolder(), text: '📂 Choose a folder…' }),
     quickRow(),
     h('p', { class: 'hint', text: 'You can also drag a folder onto this window, or paste a path in the box at the top.' }));
@@ -201,7 +201,7 @@ async function chooseFolder() {
 function downState() {
   return h('div', { class: 'state' },
     h('div', { class: 'big', text: '🔌' }),
-    h('h2', { text: 'The VeilFS backend is not running' }),
+    h('h2', { text: 'The ShadowTree backend is not running' }),
     h('p', { text: `This page could not reach ${API_BASE}. Start the backend in PowerShell:` }),
     h('code', { text: START_CMD }),
     h('button', { class: 'btn btn-primary', type: 'button', onclick: retryConnect, text: 'Try again' }));

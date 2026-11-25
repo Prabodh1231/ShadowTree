@@ -1,4 +1,4 @@
-// Thin fetch wrapper for the local VeilFS backend.
+// Thin fetch wrapper for the local ShadowTree backend.
 export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
 
 export class ApiError extends Error {
@@ -16,7 +16,7 @@ async function call(path, opts = {}) {
       headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
     });
   } catch {
-    throw new ApiError('Cannot reach the VeilFS backend.', 0);
+    throw new ApiError('Cannot reach the ShadowTree backend.', 0);
   }
   if (!res.ok) {
     let detail = '';

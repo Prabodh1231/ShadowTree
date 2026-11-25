@@ -1,4 +1,4 @@
-"""VeilFS FastAPI app. Binds to 127.0.0.1 only (see docs/review/phase-1.md for the run command)."""
+"""ShadowTree FastAPI app. Binds to 127.0.0.1 only (see docs/review/phase-1.md for the run command)."""
 from __future__ import annotations
 
 import json
@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     ai_classify.close()
 
 
-app = FastAPI(title="VeilFS", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="ShadowTree", version="0.1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=False,
                    allow_methods=["GET", "POST", "PATCH"], allow_headers=["Content-Type"])
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)

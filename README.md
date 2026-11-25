@@ -1,8 +1,8 @@
-# VeilFS
+# ShadowTree
 
 **A virtual file system for the mess in your folders. Your real files are never touched.**
 
-VeilFS reads a messy folder, uses AI that runs on your own PC to describe and sort each file, and shows the files in clean virtual folders. Nothing is moved, renamed, written or deleted on disk.
+ShadowTree reads a messy folder, uses AI that runs on your own PC to describe and sort each file, and shows the files in clean virtual folders. Nothing is moved, renamed, written or deleted on disk.
 
 ## The problem
 
@@ -24,7 +24,7 @@ Anyone with a messy folder and private files: students, freelancers, small offic
 ```mermaid
 flowchart LR
   subgraph Browser["Browser (Vite)"]
-    UI["VeilFS UI"]
+    UI["ShadowTree UI"]
     DA["Desert Ant: Redact, Gist, Emo (LiteRT.js)"]
   end
   subgraph Backend["FastAPI on 127.0.0.1:8000"]
@@ -57,7 +57,7 @@ npm run fetch-models                                              # about 114 MB
 cd ..
 
 # 3. A fake sample folder to try (writes <folder>\sample_messy_folder)
-backend\.venv\Scripts\python.exe scripts\make_samples.py "$env:USERPROFILE\Documents\VeilFS Demo"
+backend\.venv\Scripts\python.exe scripts\make_samples.py "$env:USERPROFILE\Documents\ShadowTree Demo"
 
 # 4. Start the backend in this window. Stop it with Ctrl+C.
 cd backend
@@ -99,17 +99,17 @@ Everything in this repo was written for this hackathon: the FastAPI backend, sca
 
 ## Network & privacy
 
-File contents, text, summaries and results never leave your machine. These are the only outbound requests VeilFS makes:
+File contents, text, summaries and results never leave your machine. These are the only outbound requests ShadowTree makes:
 
 | # | Request | When | Hosts | What |
 |---|---|---|---|---|
 | 1 | Backend model downloads | Once, by `scripts/download_models.py` (run it with `backend\.venv\Scripts\python.exe scripts\download_models.py`) | `huggingface.co`, `us.aws.cdn.hf.co` | Repos `Cactus-Compute/cactus` (engine `libcactus.dll`, 1.9 MB), `Cactus-Compute/needle3` (35.3 MB), `Cactus-Compute/whistle` (16.9 MB), `Cactus-Compute/mirage` (21.6 MB), `knowledgator/gliclass-v4-edge` (882 MB). After that the backend runs with `HF_HUB_OFFLINE=1` and Cactus telemetry off (`CACTUS_TELEMETRY=0`, `DO_NOT_TRACK=1`). |
 | 2 | Browser model downloads | Once, by `npm run fetch-models`; and when the app loads a model whose local files are missing | `huggingface.co`, `us.aws.cdn.hf.co` | `desert-ant-labs/redact` v0.4.2, `desert-ant-labs/gist` v2.2.0, `desert-ant-labs/emo` v0.7.0. `cd frontend; npm run fetch-models` downloads them once (about 114 MB) into `frontend\public\models\`. The app then loads them from there, with Hugging Face as the fallback if those files are missing. |
-| 3 | Desert Ant license check | Browser only, when the app loads a Desert Ant model (from Phase 2) | `events.desertant.com` | `POST https://events.desertant.com/api/v1/license` and `/api/v1/activate`. Sends a random install ID, the site domain, the model and its version, the SDK name and version, and the platform (and an API key if one is set; VeilFS sets none). It never sends inputs, outputs or file content. It has no opt-out, and VeilFS does not block, spoof or redirect it (license section 6). If it fails, the model still runs. |
+| 3 | Desert Ant license check | Browser only, when the app loads a Desert Ant model (from Phase 2) | `events.desertant.com` | `POST https://events.desertant.com/api/v1/license` and `/api/v1/activate`. Sends a random install ID, the site domain, the model and its version, the SDK name and version, and the platform (and an API key if one is set; ShadowTree sets none). It never sends inputs, outputs or file content. It has no opt-out, and ShadowTree does not block, spoof or redirect it (license section 6). If it fails, the model still runs. |
 
 Nothing else: no cloud AI APIs, no analytics.
 
-**License version.** The npm packages `@desert-ant-labs/*@5.0.0` ship `LICENSE.md` v1.0 (a pointer to [license.desertant.com/1.0](https://license.desertant.com/1.0)), and the site is at v1.1 (30 October 2026). VeilFS relies on [v1.1](https://license.desertant.com/1.1.txt) because it describes the license check the 5.0.0 SDK makes, while [v1.0](https://license.desertant.com/1.0.txt) only describes usage "telemetry" that counts monthly active devices.
+**License version.** The npm packages `@desert-ant-labs/*@5.0.0` ship `LICENSE.md` v1.0 (a pointer to [license.desertant.com/1.0](https://license.desertant.com/1.0)), and the site is at v1.1 (30 October 2026). ShadowTree relies on [v1.1](https://license.desertant.com/1.1.txt) because it describes the license check the 5.0.0 SDK makes, while [v1.0](https://license.desertant.com/1.0.txt) only describes usage "telemetry" that counts monthly active devices.
 
 **Credit.** A "Powered by Desert Ant Labs" credit linking to [desertant.com](https://desertant.com) is in the app sidebar footer now.
 
@@ -128,4 +128,4 @@ Nothing else: no cloud AI APIs, no analytics.
 | [fpdf2](https://github.com/py-pdf/fpdf2) | Makes the sample PDF (`scripts\make_samples.py` only) | LGPL-3.0 |
 | [Vite](https://vite.dev) | Frontend dev server and build | MIT |
 
-**Powered by [Desert Ant Labs](https://desertant.com).** The VeilFS code is MIT licensed, see [LICENSE](LICENSE). Other packages in `backend\requirements.txt` and `frontend\package-lock.json` keep their own licenses.
+**Powered by [Desert Ant Labs](https://desertant.com).** The ShadowTree code is MIT licensed, see [LICENSE](LICENSE). Other packages in `backend\requirements.txt` and `frontend\package-lock.json` keep their own licenses.

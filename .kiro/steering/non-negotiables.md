@@ -2,7 +2,7 @@
 inclusion: always
 ---
 
-# VeilFS non-negotiables
+# ShadowTree non-negotiables
 
 Every task in this repo must follow these rules. They outrank convenience.
 
