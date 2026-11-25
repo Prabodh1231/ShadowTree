@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterator
 
-from . import ai_cactus, ai_classify, db
+from . import ai_cactus, ai_classify, db, vectors
 from .config import SKIP_DIR_NAMES, SUPPORTED_EXTS, get_settings, is_inside
 
 _HIDDEN = getattr(stat_mod, "FILE_ATTRIBUTE_HIDDEN", 0x2)
@@ -174,6 +174,10 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
                     note = classify_file(conn, fid, folders, rec)
                     if note:
                         set_classify_note(conn, fid, note)
+                    try:
+                        vectors.embed_rows(conn, [fid])
+                    except Exception:  # model missing or busy: embed_missing retries after the scan
+                        pass
                     stats["changed" if row else "new"] += 1
         except OSError as exc:  # locked file, permission denied, vanished mid-scan
             errors.append(f"{p}: {type(exc).__name__}: {exc}")
@@ -182,6 +186,7 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
         progress(processed=i)
 
     if not should_stop():
+        vectors.embed_missing(conn)  # rows still without a vector (old DBs, failed embeds)
         for r in conn.execute("SELECT id, path FROM files").fetchall():
             n = os.path.normcase(r["path"])
             if any(is_inside(Path(r["path"]), u) for u in unreadable):

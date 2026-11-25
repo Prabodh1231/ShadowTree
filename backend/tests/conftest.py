@@ -1,8 +1,10 @@
 """Test setup: temp DB, every model mocked, non-loopback sockets blocked."""
 from __future__ import annotations
 
+import re
 import socket
 import wave
+import zlib
 from pathlib import Path
 
 import pytest
@@ -71,21 +73,19 @@ def calls(monkeypatch):
     monkeypatch.setattr(ai_cactus, "transcribe_audio", transcribe)
     monkeypatch.setattr(ai_classify, "classify", classify)
     monkeypatch.setattr(ai_classify, "rerank",
-                        lambda q, passages, wait=None: [0.9 if "invoice" in p.lower() else 0.05 for p in passages])
-    def embed(texts):
-        """Fixed 256-d vectors: same text, same vector; no model."""
-        out = np.zeros((len(texts), 256), dtype=np.float32)
+                        lambda q, passages, wait=None: [3.0 if any(w in p.lower() for w in re.findall(r"\w{4,}", q.lower())) else -11.0 for p in passages])
+
+    def embed(texts, wait=None):
+        """Bag-of-words hashed 4096-d unit vectors: shared words give a positive cosine; no model."""
+        out = np.zeros((len(texts), 4096), dtype=np.float32)
         for i, s in enumerate(texts):
-            out[i, hash_slot(s)] = 1.0
-        return out
+            for w in re.findall(r"\w+", s.lower()):
+                out[i, zlib.crc32(w.encode()) % 4096] += 1.0
+        return out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-9)
 
     monkeypatch.setattr(ai_embed, "embed", embed)
     monkeypatch.setattr(ai_ocr, "ocr_image", lambda data: ["OCR line one", "OCR line two"])
     return c
-
-
-def hash_slot(s: str) -> int:
-    return sum(map(ord, s.lower())) % 256
 
 
 @pytest.fixture

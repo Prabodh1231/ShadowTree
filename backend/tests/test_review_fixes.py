@@ -80,16 +80,16 @@ def test_l1_name_boost_rules():
 
 def test_l1_cutoff_weak_and_shape(client, sample_root, monkeypatch):
     run_scan(client, sample_root)
-    monkeypatch.setattr(ai_classify, "rerank", lambda q, p, wait=None: [0.05] * len(p))
+    monkeypatch.setattr(ai_classify, "rerank", lambda q, p, wait=None: [-11.0] * len(p))
     body = client.get("/search", params={"q": "zzqx"}).json()
     assert body["results"] == [] and 1 <= len(body["weak"]) <= 3
     files_keys = set(client.get("/files").json()[0])
     for w in body["weak"]:
-        assert set(w) == files_keys | {"score", "match"} and w["match"] < 35
+        assert set(w) == files_keys | {"score", "match"} and w["match"] < 25
     monkeypatch.setattr(ai_classify, "rerank",
-                        lambda q, p, wait=None: [0.9 if "invoice" in x.lower() else 0.05 for x in p])
+                        lambda q, p, wait=None: [3.0 if "invoice" in x.lower() else -11.0 for x in p])
     ok = client.get("/search", params={"q": "invoice"}).json()
-    assert ok["weak"] == [] and ok["results"] and all(r["match"] >= 35 for r in ok["results"])
+    assert ok["weak"] == [] and ok["results"] and all(r["match"] >= 25 for r in ok["results"])
     assert set(ok["results"][0]) == files_keys | {"score", "match"}
 
 
@@ -97,7 +97,7 @@ def test_l1_invoice_name_boost_ranks_it_first(client, sample_root, monkeypatch):
     run_scan(client, sample_root)
     # voice.wav's text also says "invoice" and the model likes it slightly better
     monkeypatch.setattr(ai_classify, "rerank",
-                        lambda q, p, wait=None: [0.62 if "electricity" in x.lower() else 0.60 for x in p])
+                        lambda q, p, wait=None: [1.0 if "electricity" in x.lower() else 0.0 for x in p])
     body = client.get("/search", params={"q": "invoice"}).json()
     assert body["results"][0]["name"] == "invoice.txt"
 
@@ -114,10 +114,10 @@ def test_l1_candidates_capped_and_batched(client, tmp_path, monkeypatch):
     def rerank(q, passages, wait=None):
         assert not MODEL_LOCK.locked()      # the search itself never holds the model lock
         sizes.append(len(passages))
-        return [0.5] * len(passages)
+        return [0.0] * len(passages)
     monkeypatch.setattr(ai_classify, "rerank", rerank)
     client.get("/search", params={"q": "zeppelins"})
-    assert sum(sizes) == 60 and max(sizes) == 16 and len(sizes) == 4   # 40 FTS + 20 recent
+    assert 50 <= sum(sizes) <= 90 and max(sizes) == 16   # 40 FTS hits + up to 50 closest vectors, in batches of 16
 
 
 # ---- L2: ungrounded model text is rejected ---------------------------------------------

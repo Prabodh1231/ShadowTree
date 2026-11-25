@@ -125,7 +125,7 @@ def test_search_falls_back_to_bm25_when_rerank_fails(client, sample_root, monkey
     monkeypatch.setattr(ai_classify, "rerank", busy)
     body = client.get("/search", params={"q": "Northwind"}).json()
     assert body["rerank"] is False and body["results"][0]["name"] == "invoice.txt"
-    assert body["results"][0]["score"] is None and body["results"][0]["match"] == 100
+    assert body["results"][0]["score"] is None and body["results"][0]["match"] >= 60 and body["note"]
 
 
 def test_post_folders_during_running_job(client, sample_root, monkeypatch):

@@ -96,9 +96,18 @@ def close_thread_conns() -> None:
     _local.conns = {}
 
 
+def migrate(conn: sqlite3.Connection) -> None:
+    """Add columns that older DBs lack. Safe to run on every start."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(files)")}
+    if "vec" not in cols:
+        conn.execute("ALTER TABLE files ADD COLUMN vec BLOB")  # float32 potion vector, 256 * 4 bytes
+    conn.commit()
+
+
 def init_db() -> None:
     conn = get_conn()
     conn.executescript(SCHEMA)
+    migrate(conn)
     for name, emoji, desc, kind in SEED_FOLDERS:
         conn.execute(
             "INSERT OR IGNORE INTO virtual_folders(name, emoji, description, kind) VALUES (?,?,?,?)",
@@ -132,7 +141,7 @@ def upsert_file(conn: sqlite3.Connection, rec: dict) -> int:
     if row:
         fid = row["id"]
         conn.execute(
-            "UPDATE files SET " + ", ".join(f"{c}=?" for c in cols) + ", keywords=? WHERE id=?",
+            "UPDATE files SET " + ", ".join(f"{c}=?" for c in cols) + ", keywords=?, vec=NULL WHERE id=?",
             (*vals, keywords, fid))
     else:
         cur = conn.execute(

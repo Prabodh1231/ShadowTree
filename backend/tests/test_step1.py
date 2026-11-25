@@ -1,4 +1,4 @@
-"""Step 1: the torch-free seams. Until Steps 2 and 3 land, classify and rerank say 'not ready'."""
+"""Step 1: the torch-free seams. Not-ready seams: classify (until Step 3), and rerank, embed, ocr when their model files are missing."""
 import pytest
 
 from app import ai_classify, ai_embed, ai_ocr
@@ -10,7 +10,10 @@ _ORIG = {n: getattr(ai_classify, n) for n in ("classify", "rerank")}
 _ORIG_E, _ORIG_O = ai_embed.embed, ai_ocr.ocr_image
 
 
-def test_seams_raise_not_ready():
+def test_seams_raise_not_ready(tmp_path, monkeypatch):
+    monkeypatch.setenv("VEILFS_DATA_DIR", str(tmp_path))   # empty data dir: no model folders, nothing loads
+    ai_classify.close()
+    ai_embed.close()
     with pytest.raises(ai_classify.NotReady):
         _ORIG["classify"]("t", ["a"])
     with pytest.raises(ai_classify.NotReady):

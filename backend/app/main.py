@@ -14,7 +14,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import ai_cactus, ai_classify, db, jobs, picker, search as search_mod
+from . import ai_cactus, ai_classify, ai_embed, db, jobs, picker, search as search_mod, vectors
 from .config import ALLOWED_HOSTS, ALLOWED_ORIGINS, apply_env, get_settings, is_inside
 
 apply_env()  # before anything can import cactus or a model package (they are imported lazily)
@@ -24,9 +24,11 @@ apply_env()  # before anything can import cactus or a model package (they are im
 async def lifespan(app: FastAPI):
     apply_env()
     db.init_db()
+    vectors.start_backfill()  # background: embed rows that have no vector yet (old DBs)
     yield
     ai_cactus.close()
     ai_classify.close()
+    ai_embed.close()
 
 
 app = FastAPI(title="ShadowTree", version="0.1.0", lifespan=lifespan)

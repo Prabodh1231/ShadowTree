@@ -584,3 +584,8 @@ Deviations from the Phase 0 notes: none in the API. `vite preview` answers
 unknown paths with `index.html` (HTTP 200), so the self-host check must also
 reject `text/html`. `vite build` copies `public/models/` into `dist/` (114 MB;
 the whole build was 292 MB).
+### Search with potion + FlashRank (Step 2, verified)
+
+- FlashRank exposes only `score = sigmoid(logit)` (float32; the ONNX output is one logit per pair). `ai_classify.rerank` returns the logit recovered as `log(s / (1 - s))`. On the sample folder a matching file gets z from about -3 to +3, every non-matching file about -11 (TinyBERT is mostly lexical). A longer passage did not change that: "money I spent" scored -10.8 for the receipt and -11.0 to -11.6 for everything else.
+- Stored vectors: `files.vec` BLOB, float32 x 256, unit length, from `model2vec` (`StaticModel.encode` output normalised in `ai_embed.embed`). Cosine = dot product. `ALTER TABLE files ADD COLUMN vec BLOB` runs in `db.migrate` behind a `PRAGMA table_info` check. Verified on a copy of the 164-file `veilfs.db`: migration, embed of all 164 rows 0.56 s (including the potion load), first search 246 ms, warm search 31 ms.
+- The match formula and the numbers behind it are in `reports/shadowtree/step2.md` and the docstring of `backend/app/search.py`.
