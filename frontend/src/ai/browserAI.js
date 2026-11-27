@@ -9,6 +9,8 @@
 // The Desert Ant license check is left alone: nothing here sets
 // __dalLicenseEndpoint or blocks events.desertant.com.
 
+import { api } from '../api.js';
+
 const TIMEOUT_MS = 20000;
 
 const models = { redact: null, gist: null, emo: null };
@@ -176,7 +178,8 @@ export async function analyzeFile(fullFile) {
 }
 
 // One file at a time. Skips cards whose stored sha256 already matches.
-export async function runPrivacyPass(cards, { apiBase = '', signal, onUpdate, onProgress } = {}) {
+// Talks to the backend through api.js, so every request carries the access token.
+export async function runPrivacyPass(cards, { signal, onUpdate, onProgress } = {}) {
   const out = { status: 'ok', done: 0, skipped: 0, failed: 0 };
   try {
     const ready = await startBrowserAI();
@@ -189,23 +192,17 @@ export async function runPrivacyPass(cards, { apiBase = '', signal, onUpdate, on
         continue;
       }
       try {
-        const full = await (await fetch(`${apiBase}/files/${card.id}`, { signal })).json();
+        const full = await api.file(card.id, { signal });
         const a = await analyzeFile(full);
         if (!a) { out.failed++; continue; }
         const body = { sha256: full.sha256, has_pii: a.has_pii, pii_types: a.pii_types, topics: a.topics };
         if (a.redacted_excerpt != null) body.redacted_excerpt = a.redacted_excerpt;
-        const res = await fetch(`${apiBase}/files/${card.id}/client-meta`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal,
-        });
-        if (res.status === 409) { out.skipped++; continue; } // file changed since the GET
-        if (!res.ok) { out.failed++; continue; }
+        await api.patchClientMeta(card.id, body, { signal });
         out.done++;
         try { onUpdate?.(body, card); } catch { /* a UI callback must not stop the pass */ }
       } catch (e) {
         if (signal?.aborted) return { ...out, status: 'aborted' };
+        if (e?.status === 409) { out.skipped++; continue; } // file changed since the GET
         out.failed++;
       }
     }

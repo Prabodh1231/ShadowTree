@@ -32,7 +32,7 @@ flowchart LR
     DA["Desert Ant: Redact, Gist, Emo (LiteRT.js)"]
     UI <--> DA
   end
-  subgraph Backend["Python FastAPI on 127.0.0.1:8000 (started and stopped by the window)"]
+  subgraph Backend["Python FastAPI on 127.0.0.1, random port + access token (started, watched and stopped by the window)"]
     CA["Cactus: Needle, Whistle, Mirage"]
     NLI["DeBERTa NLI (onnxruntime): folders"]
     POT["potion (model2vec): search recall"]
@@ -57,7 +57,7 @@ Needs Python 3.12 (on your PATH as python, not the Microsoft Store shortcut), No
 python -m venv backend\.venv
 backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 backend\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt
-backend\.venv\Scripts\python.exe scripts\download_models.py      # about 230 MB in all, once
+backend\.venv\Scripts\python.exe scripts\download_models.py      # about 230 MB in all, once; checks every file's SHA256
 
 # 2. Frontend setup (once)
 cd frontend
@@ -92,7 +92,7 @@ cd frontend
 npm run dev
 ```
 
-Open the address Vite prints (`http://localhost:5173`). Type the full path of the `sample_messy_folder` folder and press "Index (Read-Only)".
+Open the link the **backend** prints (`http://localhost:5173/#token=...`), not the bare Vite address. The backend makes a new access token every time it starts, and every request needs it (see [Network & privacy](#network--privacy)). If the page says it needs the access link, open the newest link from the backend window, or paste the token into the page. Then type the full path of the `sample_messy_folder` folder and press "Index (Read-Only)".
 
 Optional: build the app file (no installer). It takes about 5 minutes the first time and makes `frontend\src-tauri\target\release\shadowtree.exe` (about 138 MB, with the browser models inside).
 
@@ -111,7 +111,9 @@ cd ..\frontend
 npm run build
 ```
 
-**First run.** Models download once, which takes a few minutes. After that the backend runs offline. With all models loaded, the backend uses about 625 MB of RAM (working set, measured in the desktop window after a scan, searches and a new folder, OCR included; peak 627 MB). The old GLiClass model alone used 2.3 GB. The first scan of the 8 sample files takes about 10 seconds on this PC (CPU only). Some files may show a basic summary: when the title and summary model returns nothing, the file is still indexed with a title from its name. The first `npm run tauri dev` compiles the Rust shell and takes 2 to 3 minutes. If port 8000 already runs ShadowTree, the window uses it and leaves it running when you close. The backend log is `backend\data\tauri-backend.log`. If you move the app, set `$env:SHADOWTREE_REPO` to the repo folder.
+**First run.** Models download once, which takes a few minutes. After that the backend runs offline. With all models loaded, the backend uses about 625 MB of RAM (working set, measured in the desktop window after a scan, searches and a new folder, OCR included; peak 627 MB). The old GLiClass model alone used 2.3 GB. The first scan of the 8 sample files takes about 10 seconds on this PC (CPU only). Some files may show a basic summary: when the title and summary model returns nothing, the file is still indexed with a title from its name. The first `npm run tauri dev` compiles the Rust shell and takes 2 to 3 minutes. The window starts its own backend on a free random port with a fresh access token, and restarts it (up to 3 times in a row) if it stops. Only one backend can use `backend\data` at a time, so close a backend you started by hand before you open the window. The backend log is `backend\data\tauri-backend.log`. If you move the app, set `$env:SHADOWTREE_REPO` to the repo folder.
+
+To check an existing model install against the pinned hashes (offline): `backend\.venv\Scripts\python.exe scripts\download_models.py --verify`.
 
 A 2-3 minute demo walk-through is in [docs/demo_script.md](docs/demo_script.md).
 
@@ -123,6 +125,8 @@ The window works like a file manager. The virtual folders are on the left, the f
 - **Real previews.** Pictures and the first page of PDFs show as real thumbnails. The backend draws them in memory from a read-only open and writes nothing to disk. A preview appears only after the file passes the privacy check, or when you switch to Original. Until then you see a placeholder with the redacted summary.
 - **Redacted is the default.** Personal details are hidden in the text and in previews. Original shows everything, with a banner that says so.
 - **Open or reveal.** A double click or Enter opens the file in the app Windows uses for its type. "Reveal on Disk" shows it in File Explorer. ShadowTree never writes to the file. Only the supported file types are opened, and the path always comes from the index.
+- **Stop.** A scan can be stopped with Stop next to the progress bar. Files read so far stay in the index.
+- **Clear index.** "Clear index…" under the folder box deletes everything ShadowTree keeps about your files (text, summaries, search data, folder links) and compacts the database file. Your virtual folders stay; your files on disk are not touched.
 - **Themes.** The toolbar toggle switches between System, Light and Dark.
 
 | Key | Does |
@@ -181,6 +185,8 @@ Everything in this repo was written for this hackathon: the FastAPI backend, sca
 - **Desert Ant license check.** The Desert Ant browser models contact `events.desertant.com` when they load. It has no opt-out. No file content is sent. Details in Network & privacy.
 - **The folder sorter is careful.** DeBERTa files a document under a folder when its score is 0.5 or more. If no folder reaches 0.5, the file joins its single best topic folder when the score is at least 0.15 (`SOFT_FLOOR`), shown as a dashed "Best guess" chip. Below 0.15 it goes to Unsorted. New-folder jobs still use the strict 0.5 rule. On one real folder, 63 of 134 files stayed in Unsorted and 49 got a best-guess link. On the sample folder all files are sorted, but the Work & Research margin is thin (0.575 and 0.591 against 0.5).
 - **Privacy check first.** A file whose privacy check has not finished (or could not run) shows only its name and "Privacy check not available", never its text.
+- **Two privacy checks.** The backend checks all the text it reads while indexing, for emails, phone numbers (international or labelled), card numbers (Luhn check), IBANs (checksum) and US SSNs. A hit puts the file in Sensitive (PII) even if the window never runs, and the browser cannot clear it. Names and street addresses are found only by the browser's Redact model, which reads the first 2,000 characters.
+- **The index is not encrypted.** `backend\data\veilfs.db` holds text excerpts of your files in plain text, protected by your Windows account's file permissions. Use BitLocker, keep the repo inside your user folder, or use "Clear index…" when you are done.
 - **Desktop drag and drop.** The native folder dialog and the drop handler are wired, but a real drag from Explorer was not tested by hand.
 - **Scanning is slow on real folders.** Expect about 3-4 s per file, because OCR and Mirage run on PDFs and images. Measured: 375 s and 547 s for about 135 files. Cards appear as each file finishes.
 - **OCR is good, not perfect.** On the sample screenshot it read the error code right, but on a test scanned bill it dropped one space ("30November"). Only the first 3 pages of a scanned PDF are read. The first scan after an upgrade reads old images and thin PDFs again, which runs Mirage and Needle on them once.
@@ -198,11 +204,13 @@ File contents, text, summaries and results never leave your machine. These are t
 
 | # | Request | When | Hosts | What |
 |---|---|---|---|---|
-| 1 | Backend model downloads | Once, by `scripts/download_models.py` (run it with `backend\.venv\Scripts\python.exe scripts\download_models.py`) | `huggingface.co`, `us.aws.cdn.hf.co`, `cas-bridge.xethub.hf.co`, `modelscope.cn` (OCR models) | Cactus repos `Cactus-Compute/cactus` (engine `libcactus.dll`, 1.9 MB), `needle3` (35.3 MB), `whistle` (16.9 MB), `mirage` (21.6 MB). `MoritzLaurer/deberta-v3-xsmall-zeroshot-v1.1-all-33` (`model_quantized.onnx` and tokenizer), `minishlab/potion-base-8M`, the FlashRank ms-marco-TinyBERT-L-2-v2 model, and the PP-OCRv5 mobile models for RapidOCR (from `modelscope.cn`, with a SHA256 check). After that the backend runs with `HF_HUB_OFFLINE=1` and Cactus telemetry off (`CACTUS_TELEMETRY=0`, `DO_NOT_TRACK=1`). |
+| 1 | Backend model downloads | Once, by `scripts/download_models.py` (run it with `backend\.venv\Scripts\python.exe scripts\download_models.py`) | `huggingface.co`, `us.aws.cdn.hf.co`, `cas-bridge.xethub.hf.co`, `modelscope.cn` (OCR models) | Cactus repos `Cactus-Compute/cactus` (engine `libcactus.dll`, 1.9 MB), `needle3` (35.3 MB), `whistle` (16.9 MB), `mirage` (21.6 MB). `MoritzLaurer/deberta-v3-xsmall-zeroshot-v1.1-all-33` (`model_quantized.onnx` and tokenizer), `minishlab/potion-base-8M`, the FlashRank ms-marco-TinyBERT-L-2-v2 model, and the PP-OCRv5 mobile models for RapidOCR (from `modelscope.cn`). Hugging Face downloads are pinned to a commit, and every file, the Cactus engine DLL included, must match its SHA256 in `scripts/models.lock.json`. After that the backend runs with `HF_HUB_OFFLINE=1` and Cactus telemetry off (`CACTUS_TELEMETRY=0`, `DO_NOT_TRACK=1`). |
 | 2 | Browser model downloads | Once, by `npm run fetch-models`; and when the app loads a model whose local files are missing | `huggingface.co`, `us.aws.cdn.hf.co` | `desert-ant-labs/redact` v0.4.2, `desert-ant-labs/gist` v2.2.0, `desert-ant-labs/emo` v0.7.0. `cd frontend; npm run fetch-models` downloads them once (about 114 MB) into `frontend\public\models\`. With these files in place, nothing is fetched from Hugging Face while the app runs. The app contacts Hugging Face only as a fallback, when the local model files are missing. |
 | 3 | Desert Ant license check | Browser and desktop window, when the app loads a Desert Ant model | `events.desertant.com` | `POST https://events.desertant.com/api/v1/license` and `/api/v1/activate`. Sends a random install ID, the site domain, the model and its version, the SDK name and version, and the platform (and an API key if one is set; ShadowTree sets none). It never sends inputs, outputs or file content. It has no opt-out, and ShadowTree does not block, spoof or redirect it (license section 6). If it fails, the model still runs. It was not seen in the last two test runs; it is not blocked. |
 
-The desktop app's content security policy allows 'unsafe-eval' for scripts, because the Desert Ant wasm glue builds code from a string. Scripts still load only from the app itself (no inline scripts, no remote script hosts). The Tauri window loads only the local app and talks only to `http://127.0.0.1:8000`. `pip install` and `npm install` also contact `pypi.org` and the npm registry once. The Windows WebView2 runtime that draws the window also contacts Microsoft hosts on its own (port 443). That is Windows, not ShadowTree code, and none of it carries your files. Nothing else: no cloud AI APIs, no analytics.
+**Local access token.** 127.0.0.1 is shared by every program and every signed-in user on the PC, so the backend refuses every request except `GET /health` that does not carry `Authorization: Bearer <token>`. The desktop window makes a random 256-bit token and a random port each launch and passes them to the backend in `SHADOWTREE_API_TOKEN`. Started by hand, the backend makes its own token and prints the `#token=` link; the page keeps it for that browser tab only. Previews are fetched with the token too, never as plain image links.
+
+The desktop app's content security policy allows 'unsafe-eval' for scripts, because the Desert Ant wasm glue builds code from a string. Scripts still load only from the app itself (no remote script hosts). The Tauri window loads only the local app and talks only to its backend on `http://127.0.0.1:<port>`. `pip install` and `npm install` also contact `pypi.org` and the npm registry once. The Windows WebView2 runtime that draws the window also contacts Microsoft hosts on its own (port 443). That is Windows, not ShadowTree code, and none of it carries your files. Nothing else: no cloud AI APIs, no analytics.
 
 **License version.** The npm packages `@desert-ant-labs/*@5.0.0` ship `LICENSE.md` v1.0 (a pointer to [license.desertant.com/1.0](https://license.desertant.com/1.0)), and the site is at v1.1 (30 October 2026). ShadowTree relies on [v1.1](https://license.desertant.com/1.1.txt) because it describes the license check the 5.0.0 SDK makes, while [v1.0](https://license.desertant.com/1.0.txt) only describes usage "telemetry" that counts monthly active devices.
 

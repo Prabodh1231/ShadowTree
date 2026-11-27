@@ -101,9 +101,10 @@ def client(tmp_path, monkeypatch, calls):
     data = tmp_path / "appdata"
     monkeypatch.setenv("VEILFS_DATA_DIR", str(data))
     monkeypatch.setenv("VEILFS_DB_PATH", str(data / "test.db"))
+    monkeypatch.setenv("SHADOWTREE_API_TOKEN", "test-token")
     db.close_thread_conns()
     from app.main import app
-    with TestClient(app, base_url="http://127.0.0.1:8000") as c:
+    with TestClient(app, base_url="http://127.0.0.1:8000", headers={"Authorization": "Bearer test-token"}) as c:
         yield c
     jobs.wait_idle(30)
     db.close_thread_conns()

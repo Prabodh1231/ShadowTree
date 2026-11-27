@@ -359,6 +359,8 @@ def build_card(path: Path, kind: str, name: str) -> dict:
         ai_error = note
     return {
         "title": title, "summary": summary, "keywords": kws,
+        # all the text that was read, not just the excerpt; the browser pass cannot clear this
+        "server_pii": ex.detect_pii("\n".join([text, title, summary, " ".join(kws)])),
         "text_excerpt": (text or meta_line)[: cfg.excerpt_chars],
         "ai_status": status,
         "ai_error": ai_error,

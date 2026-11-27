@@ -24,6 +24,16 @@ _REPARSE = getattr(stat_mod, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 _CLOUD_ONLY = 0x400000 | 0x1000
 MEDIA_KINDS = ("image", "audio")  # these always join Screenshots & Media
 SKIP_KEYS = ("skipped_too_large", "skipped_cloud_only", "skipped_hidden_or_link")
+MAX_ERRORS = 100  # /scan/status sends the list on every poll; a scan of C:\Users can hit thousands
+MORE_ERRORS = "more errors were not listed"
+
+
+def add_error(errors: list[str], msg: str) -> None:
+    """Keep the first MAX_ERRORS messages and one closing line; drop the rest."""
+    if len(errors) < MAX_ERRORS:
+        errors.append(msg)
+    elif len(errors) == MAX_ERRORS:
+        errors.append(MORE_ERRORS)
 
 
 def _skip_attrs(st: os.stat_result) -> bool:
@@ -50,7 +60,7 @@ def walk(root: Path, data_dir: Path, errors: list[str],
         try:
             entries = sorted(os.scandir(d), key=lambda e: e.name.lower())
         except OSError as exc:
-            errors.append(f"{d}: cannot list folder: {exc}")
+            add_error(errors, f"{d}: cannot list folder: {exc}")
             unreadable.append(d)
             continue
         for e in entries:
@@ -79,7 +89,7 @@ def walk(root: Path, data_dir: Path, errors: list[str],
                         continue
                     yield p, st
             except OSError as exc:
-                errors.append(f"{p}: {exc}")
+                add_error(errors, f"{p}: {exc}")
                 unreadable.append(p)  # stat/is_dir failed: its rows (or the rows under it) must stay
 
 
@@ -237,9 +247,9 @@ def scan(root: Path, progress: Callable[..., None], errors: list[str],
                         pass
                     stats["changed" if row else "new"] += 1
         except OSError as exc:  # locked file, permission denied, vanished mid-scan
-            errors.append(f"{p}: {type(exc).__name__}: {exc}")
+            add_error(errors, f"{p}: {type(exc).__name__}: {exc}")
         except Exception as exc:
-            errors.append(f"{p}: unexpected {type(exc).__name__}: {exc}")
+            add_error(errors, f"{p}: unexpected {type(exc).__name__}: {exc}")
         progress(processed=i)
 
     if not should_stop():

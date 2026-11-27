@@ -1,11 +1,11 @@
 import './styles.css';
-import { api, ApiError, API_BASE } from './api.js';
+import { api, ApiError, apiBase, hasToken, initBrowserToken, setConnection, setToken } from './api.js';
 import { startBrowserAI, suggestEmoji, runPrivacyPass, redactText, safeLabels, browserAIOff } from './ai/browserAI.js';
 import { inTauri, waitForBackend, pickFolderNative, listenNativeDrop } from './desktop.js';
 import { icon, kindIcon } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
-const START_CMD = 'cd "<repo>\\backend"\n.\\.venv\\Scripts\\Activate.ps1\nuvicorn app.main:app --host 127.0.0.1 --port 8000';
+const START_CMD = 'cd "<repo>\\backend"\n.\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1';
 
 /** Tiny element builder. Text is always set with textContent, never innerHTML. */
 function h(tag, props = {}, ...kids) {
@@ -35,6 +35,7 @@ const state = {
   search: null,       // {results, weak} while a search is shown
   loading: true,
   down: false,
+  auth: false,        // the backend answered 401: this page has no (or a stale) access token
   scanning: false,
   job: null,
   aiUnavailable: false,
@@ -73,17 +74,22 @@ function note(text, cls = '') {
   return n;
 }
 const cardById = (id) => state.cards.find((c) => c.id === id);
-const hasPii = (c) => c.client_meta?.has_pii === true;
+// Personal data: flagged by the backend's own check while indexing (emails, phone numbers, card and
+// bank numbers; the browser cannot clear it), or by the browser's Redact model (also names, addresses).
+const hasPii = (c) => c.client_meta?.has_pii === true || (c.server_pii?.length ?? 0) > 0;
+const piiTypes = (c, meta) => [...new Set([...(c.server_pii ?? []), ...(meta?.pii_types ?? [])])];
+const unreachable = () => state.down || state.auth;
 function folderByName(n) { return state.folders.find((f) => f.name === n); }
 
 // ---------- data ----------
 async function refresh() {
   try {
     const [folders, cards] = await Promise.all([api.folders(), api.files()]);
-    state.folders = folders; state.cards = cards; state.down = false;
+    state.folders = folders; state.cards = cards; state.down = false; state.auth = false;
     if (state.view !== 'all' && !folders.some((f) => f.id === state.view)) state.view = 'all';
   } catch (e) {
     if (e instanceof ApiError && e.status === 0) state.down = true;
+    else if (e instanceof ApiError && e.status === 401) state.auth = true;
     else note(e.message, 'err');
   }
   state.loading = false;
@@ -124,7 +130,7 @@ function visibleCards() {
 }
 /** The files shown right now: search results (or the closest weak ones), else the open folder. */
 function currentList() {
-  if (state.down || state.loading) return [];
+  if (unreachable() || state.loading) return [];
   if (state.search) return state.search.results.length ? state.search.results : state.search.weak;
   return visibleCards();
 }
@@ -133,7 +139,7 @@ function renderHead() {
   const head = $('view-head');
   head.replaceChildren();
   $('back').hidden = !(state.search || state.view !== 'all');
-  if (state.down || state.loading) return;
+  if (unreachable() || state.loading) return;
   if (state.search) { head.append(h('small', { text: `${plural(currentList().length, 'result', 'results')} for “${state.query}”` })); return; }
   if (!state.cards.length) return;
   head.append(h('small', { text: plural(currentList().length, 'item', 'items') }));
@@ -145,6 +151,7 @@ function renderContent() {
   const keep = prev ? { l: prev.scrollLeft, t: prev.scrollTop } : null;
   box.replaceChildren();
   if (state.down) { box.append(downState()); return syncSelection([]); }
+  if (state.auth) { box.append(authState()); return syncSelection([]); }
   if (state.loading) { box.append(h('div', { class: 'skeleton-strip' }, [1, 2, 3, 4, 5, 6].map(() => h('div', { class: 'skeleton' })))); return syncSelection([]); }
   if (state.search) {
     const { results, weak } = state.search;
@@ -235,7 +242,7 @@ async function chooseFolder() {
       : await api.pickFolder($('root').value.trim() || null);
     if (r.path) { $('root').value = r.path; startScan(); }
   } catch (err) {
-    if (err.status === 0) { state.down = true; renderAll(); }
+    if (err.status === 0 || err.status === 401) { state.down = err.status === 0; state.auth = err.status === 401; renderAll(); }
     else toast(err.status === 409 ? 'A folder window is already open. Check your taskbar.' : err.message);
   } finally {
     picking = false; btn.disabled = false; btn.textContent = label;
@@ -243,14 +250,38 @@ async function chooseFolder() {
 }
 
 function downState() {
+  if (inTauri) {
+    return h('div', { class: 'state' },
+      h('div', { class: 'big', text: '🔌' }),
+      h('h2', { text: 'The local helper is not answering' }),
+      h('p', { text: 'ShadowTree restarts it by itself. Press Try again in a few seconds.' }),
+      h('button', { class: 'btn btn-primary', type: 'button', onclick: retryConnect, text: 'Try again' }));
+  }
   return h('div', { class: 'state' },
     h('div', { class: 'big', text: '🔌' }),
     h('h2', { text: 'The ShadowTree backend is not running' }),
-    h('p', { text: `This page could not reach ${API_BASE}. Start the backend in PowerShell:` }),
+    h('p', { text: `This page could not reach ${apiBase()}. Start the backend in PowerShell, then open the link it prints:` }),
     h('code', { text: START_CMD }),
     h('button', { class: 'btn btn-primary', type: 'button', onclick: retryConnect, text: 'Try again' }));
 }
-async function retryConnect() { state.loading = true; renderAll(); await refresh(); if (!state.down) { await resumeIfRunning(); startAI(); } }
+
+// Browser only: the backend answered 401. Its log prints a link with the access token (#token=...).
+function authState() {
+  const input = h('input', { type: 'password', placeholder: 'Paste the token', 'aria-label': 'Access token', autocomplete: 'off', spellcheck: 'false' });
+  const use = (e) => { e.preventDefault(); if (!input.value.trim()) return; setToken(input.value); retryConnect(); };
+  return h('div', { class: 'state' },
+    h('div', { class: 'big', text: '🔑' }),
+    h('h2', { text: hasToken() ? 'This access link has expired' : 'This page needs the backend’s access link' }),
+    h('p', { text: 'Every start of the backend makes a new private link, so other programs on this PC cannot read your index. ' +
+      'Open the link from the backend window (it looks like http://localhost:5173/#token=…), or paste the token here.' }),
+    h('form', { class: 'token-form', onsubmit: use }, input, h('button', { class: 'btn btn-primary', type: 'submit', text: 'Connect' })));
+}
+async function retryConnect() {
+  state.loading = true; renderAll();
+  if (inTauri) { const info = await waitForBackend(); if (info) setConnection(info.base, info.token); }
+  await refresh();
+  if (!unreachable()) { await resumeIfRunning(); startAI(); }
+}
 
 // ---------- privacy gate (fails closed) ----------
 // A file's own text (summary, title, tags) is shown only after the privacy check has covered
@@ -331,9 +362,43 @@ function safeView(c) {
 // Otherwise the placeholder stays (a page with the redacted summary, or an icon).
 const isVisual = (c) => c.kind === 'image' || c.kind === 'pdf';
 const canPreview = (c) => isVisual(c) && (state.mode === 'original' || privacyState(c) === 'clear');
-const previewUrl = (c, size) => `${API_BASE}/files/${c.id}/preview?size=${size}&v=${(c.sha256 ?? '').slice(0, 8)}`;
+const previewPath = (c, size) => `/files/${c.id}/preview?size=${size}&v=${(c.sha256 ?? '').slice(0, 8)}`;
+
+// Previews need the access token, which an <img src> cannot send. So the page fetches each PNG with
+// the token and shows it from a blob: URL, when it comes near the view. Recent ones stay cached so a
+// redraw does not fetch again; a failed fetch is not cached (the backend may be restarting).
+const PREVIEW_CACHE_MAX = 240;
+const previewBlobs = new Map();   // path -> Promise<objectURL | null>
+function previewObjectUrl(path) {
+  let p = previewBlobs.get(path);
+  if (p) { previewBlobs.delete(path); previewBlobs.set(path, p); return p; }   // most recent last
+  p = api.blob(path).then((b) => URL.createObjectURL(b), () => { if (previewBlobs.get(path) === p) previewBlobs.delete(path); return null; });
+  previewBlobs.set(path, p);
+  while (previewBlobs.size > PREVIEW_CACHE_MAX) {
+    const [oldest, gone] = previewBlobs.entries().next().value;
+    previewBlobs.delete(oldest);
+    gone.then((u) => u && setTimeout(() => URL.revokeObjectURL(u), 10000));   // an <img> on screen keeps its pixels
+  }
+  return p;
+}
+function dropPreviews() {
+  for (const p of previewBlobs.values()) p.then((u) => u && URL.revokeObjectURL(u));
+  previewBlobs.clear();
+}
+function fillPreview(img) {
+  previewObjectUrl(img.dataset.src).then((u) => { if (u) img.src = u; else img.remove(); });
+}
+const previewIO = typeof IntersectionObserver === 'function'
+  ? new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { previewIO.unobserve(e.target); fillPreview(e.target); }
+  }, { rootMargin: '300px' })
+  : null;
 /** The picture itself. If the backend cannot make one, the image removes itself and the placeholder shows. */
-const previewImg = (c, size, cls = 'thumb-img') => h('img', { class: cls, src: previewUrl(c, size), alt: '', loading: 'lazy', decoding: 'async', onerror: (e) => e.target.remove() });
+function previewImg(c, size, cls = 'thumb-img') {
+  const img = h('img', { class: cls, alt: '', decoding: 'async', 'data-src': previewPath(c, size), onerror: (e) => e.target.remove() });
+  if (previewIO) previewIO.observe(img); else fillPreview(img);
+  return img;
+}
 
 // ---------- items: one file as a filmstrip card, an icon, or a list row ----------
 function thumbEl(c) {
@@ -444,7 +509,9 @@ function withTokens(text) {
 function sheetEl(f) {
   const card = cardObjs.get(f.id) ?? f;
   const red = state.mode === 'redacted';
-  const meta = card.client_meta ?? f.client_meta ?? {};
+  // List cards leave out the redacted excerpt (it is large); the full file has it. A privacy pass that
+  // finished after the file was opened updates the card, so the card's values win.
+  const meta = { ...(f.client_meta ?? {}), ...(card.client_meta ?? {}) };
   const title = red ? safeView(card).title : (f.title || f.name);
   let body;
   if (red) {
@@ -527,7 +594,8 @@ function renderInfo() {
   const red = state.mode === 'redacted';
   if (red) redactDrawerSummary(f);
   const card = cardObjs.get(f.id) ?? f;
-  const meta = card.client_meta ?? f.client_meta ?? {};
+  const meta = { ...(f.client_meta ?? {}), ...(card.client_meta ?? {}) };
+  const types = piiTypes(card, meta);
   const safe = safeView(card);
   const keywords = red ? safe.keywords : (f.keywords ?? []);
   const topics = (meta.topics ?? []).slice(0, 2);
@@ -537,7 +605,7 @@ function renderInfo() {
     h('h2', { id: 'drawer-title', text: red ? safe.title : (f.title || f.name) }),
     h('div', { class: 'sub', text: `${KIND_LABEL[f.kind] ?? f.kind} · ${fmtSize(f.size)}` }),
     (hasPii(card) || f.folders?.length) ? h('div', { class: 'chips' },
-      hasPii(card) && h('span', { class: 'pii', title: (meta.pii_types ?? []).join(', ') || 'Personal details found', text: '⚠ PII: ' + ((meta.pii_types ?? []).join(', ') || 'personal details') }),
+      hasPii(card) && h('span', { class: 'pii', title: types.join(', ') || 'Personal details found', text: '⚠ PII: ' + (types.join(', ') || 'personal details') }),
       (f.folders ?? []).map((l) => chip(l))) : null,
     h('h3', { text: 'Summary' }),
     h('p', { class: 'full', id: 'drawer-summary', text: summaryText(f, state.mode) }),
@@ -610,7 +678,7 @@ async function doSearch() {
     if ($('q').value.trim() !== q) return; // a newer search is running
     state.search = r;
   } catch (e) {
-    if (e.status === 0) { state.down = true; }
+    if (e.status === 0 || e.status === 401) { state.down = e.status === 0; state.auth = e.status === 401; }
     else { state.search = null; note('Search failed: ' + e.message, 'err'); }
   }
   renderAll();
@@ -623,6 +691,7 @@ function showProgress(s) {
   p.hidden = !running;
   if (!running) return;
   const reclass = s.kind === 'reclassify'; // job kind text from backend/app/jobs.py
+  $('stop-btn').hidden = reclass;          // sorting into a new folder is short; a scan can take hours
   const fill = $('bar-fill');
   const known = s.total > 0;
   fill.classList.toggle('indeterminate', !known);
@@ -646,7 +715,10 @@ function pollJob() {
   const tick = async () => {
     let s;
     try { s = await api.scanStatus(); }
-    catch { state.scanning = false; state.down = true; $('progress').hidden = true; setScanBusy(false); renderAll(); return; }
+    catch (e) {
+      state.scanning = false; state.auth = e.status === 401; state.down = !state.auth;
+      $('progress').hidden = true; setScanBusy(false); renderAll(); return;
+    }
     state.job = s;
     showProgress(s);
     if (s.state === 'running' || s.state === 'queued') {
@@ -656,14 +728,43 @@ function pollJob() {
     state.scanning = false; setScanBusy(false);
     $('progress').hidden = true;
     if (s.state === 'error') note('The job stopped with an error. Some files may not have been read.', 'err');
+    if (s.state === 'cancelled') note('Stopped. The files read so far stay in the index; index the folder again to read the rest.');
     (s.errors ?? []).slice(0, 3).forEach((e) => note(typeof e === 'string' ? e : (e.message ?? JSON.stringify(e)), 'err'));
     if ((s.kind ?? '') !== 'reclassify') showSkipped(s.stats);
     await refresh();
-    if (s.state === 'done') startPrivacyPass();
+    if (s.state === 'done' || s.state === 'cancelled') startPrivacyPass();
   };
   tick();
 }
-function setScanBusy(b) { $('scan-btn').disabled = b; $('scan-btn').textContent = b ? 'Indexing…' : 'Index (Read-Only)'; }
+async function stopScan() {
+  const btn = $('stop-btn');
+  btn.disabled = true; btn.textContent = 'Stopping…';
+  try { await api.cancelScan(); toast('Stopping after the file it is reading…'); }
+  catch (e) { toast(e.message); btn.disabled = false; btn.textContent = 'Stop'; }
+}
+
+// Forget every indexed file: text, summaries, search vectors and folder links. Folders and files on disk stay.
+async function clearIndex() {
+  if (state.scanning) return toast('Stop the indexing first.');
+  if (!window.confirm('Remove every file from ShadowTree’s index?\n\nThis deletes the text, summaries and search data ShadowTree keeps about your files. ' +
+    'Your virtual folders stay. Your real files are not touched.')) return;
+  try {
+    const r = await api.clearIndex();
+    passAbort?.abort();
+    dropPreviews(); cardSummaries.clear(); safeCache.clear(); cardObjs.clear();
+    clearSearch(); state.view = 'all'; state.sel = null;
+    $('notes').replaceChildren(); showSkipped(null);
+    await refresh();
+    toast(`Index cleared (${plural(r.removed, 'file', 'files')})`);
+  } catch (e) {
+    toast(e.status === 409 ? 'A job is running. Stop it or wait, then clear the index.' : e.message);
+  }
+}
+function setScanBusy(b) {
+  $('scan-btn').disabled = b; $('scan-btn').textContent = b ? 'Indexing…' : 'Index (Read-Only)';
+  $('clear-btn').disabled = b;
+  if (b) { $('stop-btn').disabled = false; $('stop-btn').textContent = 'Stop'; }
+}
 
 async function resumeIfRunning() {
   try { const s = await api.scanStatus(); if (s.state === 'running') { state.scanning = true; setScanBusy(true); pollJob(); } } catch { /* ignore */ }
@@ -682,7 +783,7 @@ async function startScan() {
   try { await api.scan(root); pollJob(); }
   catch (err) {
     state.scanning = false; setScanBusy(false);
-    if (err.status === 0) { state.down = true; renderAll(); }
+    if (err.status === 0 || err.status === 401) { state.down = err.status === 0; state.auth = err.status === 401; renderAll(); }
     else note(err.status === 409 ? 'A job is already running. Wait for it to finish.' : err.status === 400 ? `That folder can’t be indexed: ${err.message}` : err.message, 'err');
   }
 }
@@ -722,7 +823,7 @@ async function startPrivacyPass() {
   privacy.running = true; privacyTouch('loading'); renderAll();
   try {
     r = await runPrivacyPass(state.cards, {
-      apiBase: API_BASE, signal: ctl.signal,
+      signal: ctl.signal,
       onProgress: () => privacyTouch('working'),
       onUpdate: (clientMeta, card) => {
         const id = card?.id;
@@ -741,7 +842,7 @@ async function startPrivacyPass() {
   privacy.running = false; clearTimeout(privacyTimer); renderAll();  // whatever is still unchecked is now 'unavailable'
   if (r?.status === 'unavailable' && !state.aiUnavailable) {
     state.aiUnavailable = true;
-    note('Privacy scan unavailable. Everything else works, but personal details will not be flagged.');
+    note('The browser privacy scan is unavailable. Emails, phone, card and bank numbers are still flagged, but names and addresses are not.');
     renderAll();
   }
   await refreshFolders();
@@ -750,7 +851,7 @@ function startAI() {
   // After first paint, so the page is usable while models load.
   requestAnimationFrame(() => setTimeout(async () => {
     await startBrowserAI();
-    if (!state.down && state.cards.length) startPrivacyPass();
+    if (!unreachable() && state.cards.length) startPrivacyPass();
   }, 50));
 }
 
@@ -797,6 +898,8 @@ $('mode-original').addEventListener('click', () => setMode('original'));
 $('quick').addEventListener('click', (e) => { if (e.target === $('quick')) closeQuick(); });
 $('scan-form').addEventListener('submit', onScan);
 $('pick-btn').addEventListener('click', () => chooseFolder());
+$('stop-btn').addEventListener('click', stopScan);
+$('clear-btn').addEventListener('click', clearIndex);
 // Drag and drop: the browser hides a dropped folder's location, so a drop opens the
 // picker (it also stops the browser from opening a dropped file in place of the app).
 const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
@@ -843,7 +946,11 @@ try { $('root').value = localStorage.getItem('veilfs-root') ?? ''; } catch { /* 
 applyThemeLabel();
 renderAll();
 let backendReady = false;
-waitForBackend().then(() => { backendReady = true; return refresh(); }).then(async () => { if (!state.down) { await resumeIfRunning(); } startAI(); });
+if (!inTauri) initBrowserToken();   // the #token=... link the backend printed, or this tab's copy
+waitForBackend().then((info) => {
+  if (info) setConnection(info.base, info.token);   // desktop: the shell's random port and token
+  backendReady = true; return refresh();
+}).then(async () => { if (!unreachable()) { await resumeIfRunning(); } startAI(); });
 // Desktop window: real dropped paths (the browser drop handler above stays for browsers).
 listenNativeDrop({
   onOver: () => document.body.classList.add('dropping'),

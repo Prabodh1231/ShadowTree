@@ -1,0 +1,81 @@
+{
+  "about": "Pinned model files for scripts/download_models.py. Paths are relative to backend/data. Every file is SHA256-checked after download; run 'download_models.py --verify' to check an install. Hugging Face downloads use the pinned commit in 'revisions'. Cactus picks its own files; the paths below include the Cactus engine version and commit, so a different download fails the check.",
+  "revisions": {
+    "MoritzLaurer/deberta-v3-xsmall-zeroshot-v1.1-all-33": "262ae02f29173eec1c250f90804dc7edc677dcff",
+    "minishlab/potion-base-8M": "bf8b056651a2c21b8d2565580b8569da283cab23"
+  },
+  "files": {
+    "models/deberta/config.json": {
+      "sha256": "dc6de98193d85d4c45f96724e6dd3672b897af3f1592e02625b9a71be795887b",
+      "bytes": 1017
+    },
+    "models/deberta/onnx/model_quantized.onnx": {
+      "sha256": "1fbf78872ceab4e8003eaa0696896008c019d5a239be734c5d6230f312ad480e",
+      "bytes": 87246195
+    },
+    "models/deberta/tokenizer.json": {
+      "sha256": "05402ffae6dd382a8491b1d29bfc139bec5d332662e86a026f433ce54c25c202",
+      "bytes": 8656646
+    },
+    "models/flashrank/ms-marco-TinyBERT-L-2-v2/config.json": {
+      "sha256": "2144195e107cd7ea61556478e7add12986ebfbc3085f924fc0b90c2410604879",
+      "bytes": 787
+    },
+    "models/flashrank/ms-marco-TinyBERT-L-2-v2/flashrank-TinyBERT-L-2-v2.onnx": {
+      "sha256": "a2b09fb0de692c052a55f4165c9461377b4a31115673b7adb428503d69109196",
+      "bytes": 4486733
+    },
+    "models/flashrank/ms-marco-TinyBERT-L-2-v2/special_tokens_map.json": {
+      "sha256": "303df45a03609e4ead04bc3dc1536d0ab19b5358db685b6f3da123d05ec200e3",
+      "bytes": 112
+    },
+    "models/flashrank/ms-marco-TinyBERT-L-2-v2/tokenizer.json": {
+      "sha256": "ce64fce797c24f68df90b40a3f74f579b336a493db14bd583fd520ea0d8c9a98",
+      "bytes": 466062
+    },
+    "models/flashrank/ms-marco-TinyBERT-L-2-v2/tokenizer_config.json": {
+      "sha256": "eaf913a687e8eed3010b6479d0d84631038212aa50c14d9b812e08cbc891d925",
+      "bytes": 525
+    },
+    "models/ocr/ch_PP-OCRv5_det_mobile.onnx": {
+      "sha256": "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
+      "bytes": 4819576
+    },
+    "models/ocr/ch_PP-OCRv5_rec_mobile.onnx": {
+      "sha256": "5825fc7ebf84ae7a412be049820b4d86d77620f204a041697b0494669b1742c5",
+      "bytes": 16631306
+    },
+    "models/ocr/ppocrv5_dict.txt": {
+      "sha256": "d1979e9f794c464c0d2e0b70a7fe14dd978e9dc644c0e71f14158cdf8342af1b",
+      "bytes": 74012
+    },
+    "models/potion-base-8M/config.json": {
+      "sha256": "2a6ac0e9aaa356a68a5688070db78fc3a464fefe85d2f06a1905ce3718687553",
+      "bytes": 202
+    },
+    "models/potion-base-8M/model.safetensors": {
+      "sha256": "f65d0f325faadc1e121c319e2faa41170d3fa07d8c89abd48ca5358d9a223de2",
+      "bytes": 30236760
+    },
+    "models/potion-base-8M/tokenizer.json": {
+      "sha256": "e67e803f624fb4d67dea1c730d06e1067e1b14d830e2c2202569e3ef0f70bb50",
+      "bytes": 683666
+    },
+    "cache/cactus/engine/4.1.4/f4ab2741203a282c6e7b89983de2b5e5b2e805a8/libcactus.dll": {
+      "sha256": "a28490bc7826c7b0ee9c51bc3092a26ec935a85d08ea82a7ed3593fadde5b381",
+      "bytes": 1914880
+    },
+    "cache/cactus/models/mirage/76c1e9e53381aca8fc3843c636216c96ff220122/mirage.cact": {
+      "sha256": "4249a0f7515272ff76b9414bec17d7e7daf84b15b66c7fb4f17fce1e66f9f237",
+      "bytes": 21611043
+    },
+    "cache/cactus/models/needle3/d6c7d6a2e9655505e0f8e23339356dd1705900eb/needle3.cact": {
+      "sha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+      "bytes": 35335380
+    },
+    "cache/cactus/models/whistle/88cb00eeb8928ddbcd410b491584f938ba030b07/whistle.cact": {
+      "sha256": "b6e02f048568ac5d01a2042556c658061e699acbc0aa2a1439f52f3d461dffeb",
+      "bytes": 16919407
+    }
+  }
+}

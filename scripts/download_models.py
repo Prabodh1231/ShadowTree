@@ -1,21 +1,29 @@
-"""Download every backend model once into backend/data/ (idempotent).
+"""Download every backend model once into backend/data/ (idempotent), then check every file.
 
-  backend\\.venv\\Scripts\\python.exe scripts\\download_models.py
+  backend\\.venv\\Scripts\\python.exe scripts\\download_models.py            # download + check
+  backend\\.venv\\Scripts\\python.exe scripts\\download_models.py --verify   # check only, offline
 
 This is the ONLY script that goes online (apply_env(allow_download=True)). The backend
 itself always runs with HF_HUB_OFFLINE=1. Hosts: huggingface.co (DeBERTa, potion, FlashRank
-zip, Cactus weights) and modelscope.cn (PP-OCRv5, SHA256 checked). Files land in
-backend/data/models/<name>; Cactus keeps its own cache under backend/data/cache.
+zip, Cactus weights) and modelscope.cn (PP-OCRv5). Files land in backend/data/models/<name>;
+Cactus keeps its own cache under backend/data/cache.
+
+Supply chain: Hugging Face downloads are pinned to a commit, and every file (the Cactus engine
+DLL included, which is native code) must match the SHA256 in scripts/models.lock.json. A file
+that does not match is reported and the script exits with an error; the backend should not be
+started on it.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 import time
 import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+LOCK = json.loads((Path(__file__).with_name("models.lock.json")).read_text(encoding="utf-8"))
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.config import (DEBERTA_FILES, DEBERTA_REPO, FLASHRANK_MODEL, POTION_FILES, POTION_REPO,  # noqa: E402
@@ -53,7 +61,7 @@ def step(label: str, fn) -> bool:
 def deberta():
     from huggingface_hub import hf_hub_download
     for f in DEBERTA_FILES:  # exactly these three files, never the 140 MB weights
-        hf_hub_download(DEBERTA_REPO, f, local_dir=model_dir("deberta"))
+        hf_hub_download(DEBERTA_REPO, f, local_dir=model_dir("deberta"), revision=LOCK["revisions"][DEBERTA_REPO])
 
 
 def potion():
@@ -61,8 +69,28 @@ def potion():
     from model2vec import StaticModel
     d = model_dir("potion-base-8M")
     for f in POTION_FILES:
-        hf_hub_download(POTION_REPO, f, local_dir=d)
+        hf_hub_download(POTION_REPO, f, local_dir=d, revision=LOCK["revisions"][POTION_REPO])
     StaticModel.from_pretrained(d)  # prove the local folder loads
+
+
+def verify(data: Path) -> bool:
+    """Every file in models.lock.json exists under `data` with the pinned SHA256."""
+    ok = True
+    for rel, want in LOCK["files"].items():
+        p = data / rel
+        if not p.is_file():
+            print(f"[MISSING] {rel}")
+            ok = False
+            continue
+        h = hashlib.sha256()
+        with open(p, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        if h.hexdigest() != want["sha256"]:
+            print(f"[BAD HASH] {rel}: expected {want['sha256'][:16]}..., got {h.hexdigest()[:16]}...")
+            ok = False
+    print(f"verify: {len(LOCK['files'])} pinned files, " + ("all match." if ok else "PROBLEMS FOUND (see above)."))
+    return ok
 
 
 def flashrank():
@@ -105,6 +133,9 @@ def present() -> None:
 
 
 def main() -> int:
+    if "--verify" in sys.argv[1:]:
+        apply_env()                       # offline: nothing is fetched
+        return 0 if verify(get_settings().data_dir) else 1
     apply_env(allow_download=True)
     data = get_settings().data_dir
     print(f"data dir: {data}")
@@ -126,7 +157,8 @@ def main() -> int:
 
     present()
     print(f"cactus cache {dir_mb(data / 'cache' / 'cactus'):.0f} MB")
-    print("done." if ok else "some downloads failed; see above.")
+    ok &= verify(data)
+    print("done." if ok else "some downloads failed or did not match their pinned hash; see above.")
     return 0 if ok else 1
 
 

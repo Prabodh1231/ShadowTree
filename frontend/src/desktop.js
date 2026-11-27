@@ -22,9 +22,10 @@ function overlay() {
   return el;
 }
 
-/** Resolves when the local backend answers. In a browser it resolves at once. */
+/** Resolves with {base, token} when the local backend answers. In a browser it resolves at once
+ * with null. The shell restarts a backend that stops, so this is also the way back after one. */
 export async function waitForBackend() {
-  if (!inTauri) return;
+  if (!inTauri) return null;
   const { invoke } = await import('@tauri-apps/api/core');
   const el = overlay();
   const title = el.querySelector('#desktop-boot-title'); const msg = el.querySelector('#desktop-boot-msg');
@@ -33,8 +34,9 @@ export async function waitForBackend() {
   for (;;) {
     let s;
     try { s = await invoke('backend_status'); } catch (e) { s = { state: 'error', message: String(e) }; }
-    if (s.state === 'ready') { el.remove(); return; }
+    if (s.state === 'ready') { el.remove(); return { base: s.base, token: s.token }; }
     if (s.state === 'error') { title.textContent = 'ShadowTree could not start'; msg.textContent = s.message; return new Promise(() => {}); }
+    if (s.message && s.message !== 'Starting ShadowTree...') msg.textContent = s.message;   // e.g. "Restarting it..."
     await sleep(400);
   }
 }

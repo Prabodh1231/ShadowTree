@@ -8,6 +8,7 @@ functions, for that reason).
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,28 @@ ALLOWED_ORIGINS = [
     "http://tauri.localhost", "tauri://localhost",  # the Tauri desktop shell (Windows, other OS)
 ]
 ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
+# Every request except GET /health needs "Authorization: Bearer <token>". 127.0.0.1 is shared by
+# every process and every signed-in Windows user on the PC, so binding to loopback alone does not
+# keep other users out. The desktop shell makes a fresh random token per launch and passes it in
+# this variable. Started by hand (browser mode), the backend makes its own and logs a link with it.
+TOKEN_ENV = "SHADOWTREE_API_TOKEN"
+_generated_token: str | None = None
+
+
+def api_token() -> str:
+    """The token requests must carry: the env value, else one random token for this process."""
+    global _generated_token
+    t = os.environ.get(TOKEN_ENV, "").strip()
+    if t:
+        return t
+    if _generated_token is None:
+        _generated_token = secrets.token_urlsafe(32)
+    return _generated_token
+
+
+def token_from_env() -> bool:
+    return bool(os.environ.get(TOKEN_ENV, "").strip())
 
 DEBERTA_REPO = "MoritzLaurer/deberta-v3-xsmall-zeroshot-v1.1-all-33"
 DEBERTA_FILES = ["onnx/model_quantized.onnx", "tokenizer.json", "config.json"]
@@ -59,6 +82,7 @@ class Settings:
     search_lock_wait_s: float      # how long /search waits for the model lock
     model_timeout_s: float         # soft timeout (measured, cannot interrupt)
     excerpt_chars: int
+    preview_cache_bytes: int       # in-memory preview PNGs, total
     allow_download: bool
 
 
@@ -77,6 +101,7 @@ def get_settings() -> Settings:
         search_lock_wait_s=_float("SEARCH_LOCK_WAIT_S", 5.0),
         model_timeout_s=_float("MODEL_TIMEOUT_S", 60.0),
         excerpt_chars=_int("EXCERPT_CHARS", 2000),
+        preview_cache_bytes=_int("PREVIEW_CACHE_MB", 64) * 1024 * 1024,
         allow_download=False,
     )
 

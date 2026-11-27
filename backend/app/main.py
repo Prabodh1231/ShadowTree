@@ -1,8 +1,9 @@
 """ShadowTree FastAPI app. Binds to 127.0.0.1 only (see docs/review/phase-1.md for the run command)."""
 from __future__ import annotations
 
-import functools
+import hmac
 import json
+import logging
 import os
 import sqlite3
 import subprocess
@@ -14,27 +15,57 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import ai_cactus, ai_classify, ai_embed, db, extractors, jobs, picker, search as search_mod, vectors
-from .config import ALLOWED_HOSTS, ALLOWED_ORIGINS, SUPPORTED_EXTS, apply_env, get_settings, is_inside
+from . import (ai_cactus, ai_classify, ai_embed, db, extractors, instance, jobs, picker,
+               search as search_mod, vectors)
+from .config import (ALLOWED_HOSTS, ALLOWED_ORIGINS, SUPPORTED_EXTS, api_token, apply_env, get_settings,
+                     is_inside, token_from_env)
+from .previews import PreviewCache
 
 apply_env()  # before anything can import cactus or a model package (they are imported lazily)
+log = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     apply_env()
-    db.init_db()
-    vectors.start_backfill()  # background: embed rows that have no vector yet (old DBs)
-    yield
-    ai_cactus.close()
-    ai_classify.close()
-    ai_embed.close()
+    instance.acquire(get_settings().data_dir)  # one backend per data folder; raises AlreadyRunning
+    try:
+        db.init_db()
+        vectors.start_backfill()  # background: embed rows that have no vector yet (old DBs)
+        if not token_from_env():
+            log.warning("Browser mode: open http://localhost:5173/#token=%s in your browser "
+                        "(the link changes every time the backend starts).", api_token())
+        yield
+    finally:
+        jobs.cancel()
+        ai_cactus.close()
+        ai_classify.close()
+        ai_embed.close()
+        instance.release()
 
 
 app = FastAPI(title="ShadowTree", version="0.1.0", lifespan=lifespan)
+
+OPEN_PATHS = {"/health"}  # the desktop shell probes this before it can talk to the backend
+
+
+async def require_token(request: Request, call_next):
+    """Every request but /health carries the per-launch token. Runs inside CORS, so a 401
+    still has CORS headers and the page can tell "wrong token" from "backend down"."""
+    if request.method == "OPTIONS" or request.url.path in OPEN_PATHS:
+        return await call_next(request)
+    sent = request.headers.get("authorization", "").encode()
+    if not hmac.compare_digest(sent, f"Bearer {api_token()}".encode()):
+        return JSONResponse({"detail": "missing or wrong access token"}, status_code=401)
+    return await call_next(request)
+
+
+# Added first = innermost. Order from the outside in: foreign-origin check, trusted host, CORS, token.
+app.add_middleware(BaseHTTPMiddleware, dispatch=require_token)
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=False,
-                   allow_methods=["GET", "POST", "PATCH"], allow_headers=["Content-Type"])
+                   allow_methods=["GET", "POST", "PATCH"], allow_headers=["Content-Type", "Authorization"])
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
 
@@ -131,14 +162,33 @@ def scan_status():
                               "errors", "stats", "queued_job_id")}
 
 
+@app.post("/scan/cancel")
+def scan_cancel():
+    """Stop the running job after the file it is on. Files read so far stay in the index."""
+    return {"cancelled": jobs.cancel()}
+
+
+@app.post("/index/clear")
+def clear_index():
+    """Forget every indexed file (text, summaries, vectors, links). Virtual folders stay.
+    Files on disk are never touched."""
+    try:
+        with jobs.exclusive():
+            n = db.clear_index(db.get_conn())
+    except jobs.JobRunning:
+        raise HTTPException(409, "a job is running; stop it or wait, then clear the index")
+    _previews.clear()
+    return {"removed": n}
+
+
 # ---- files --------------------------------------------------------------------------
 
 def _folder_filter(conn, folder_id: int) -> tuple[str, list]:
     f = conn.execute("SELECT name, kind FROM virtual_folders WHERE id=?", (folder_id,)).fetchone()
     if not f:
         raise HTTPException(404, "folder not found")
-    if f["name"] == db.SENSITIVE:  # computed from the browser-side privacy scan
-        return "json_extract(f.client_meta, '$.has_pii') = 1", []
+    if f["name"] == db.SENSITIVE:  # the server-side check while indexing, or the browser privacy pass
+        return db.PII_SQL.format(t="f."), []
     return "f.id IN (SELECT file_id FROM file_folder_links WHERE folder_id=?)", [folder_id]
 
 
@@ -169,24 +219,32 @@ def get_file(file_id: int):
     return db.file_cards(conn, [row], full=True)[0]
 
 
-@functools.lru_cache(maxsize=128)
-def _preview_png(path: str, kind: str, size: int, mtime: float, bytes_: int) -> bytes | None:
-    """Rendered previews, kept in memory only. mtime and size key the entry, so an edited file re-renders."""
-    return extractors.render_preview(Path(path), kind, size)
+# Rendered previews, in memory only, bounded by bytes (PREVIEW_CACHE_MB). The disk mtime and
+# size are part of the key, so an edited file renders again.
+_previews = PreviewCache(get_settings().preview_cache_bytes)
 
 
 @app.get("/files/{file_id}/preview")
 def file_preview(file_id: int, size: int = Query(default=480, ge=64, le=1200)):
     """A PNG of an image or the first page of a PDF, rendered in memory from a read-only open."""
-    row = db.get_conn().execute("SELECT path, kind, size, mtime FROM files WHERE id=?", (file_id,)).fetchone()
+    row = db.get_conn().execute("SELECT path, kind FROM files WHERE id=?", (file_id,)).fetchone()
     if not row:
         raise HTTPException(404, "file not found")
     if row["kind"] not in ("image", "pdf"):
         raise HTTPException(415, "this kind of file has no visual preview")
-    if not Path(row["path"]).is_file():
+    path = Path(row["path"])
+    try:
+        st = path.stat()
+    except OSError:
+        st = None
+    if st is None or not path.is_file():
         raise HTTPException(410, "file no longer exists on disk")
-    png = _preview_png(row["path"], row["kind"], size, row["mtime"], row["size"])
+    key = (str(path), row["kind"], size, st.st_mtime, st.st_size)
+    png = _previews.get(key)
     if png is None:
+        png = extractors.render_preview(path, row["kind"], size, limit=get_settings().max_file_bytes) or b""
+        _previews.put(key, png)
+    if not png:
         raise HTTPException(415, "no preview could be made for this file")
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "private, max-age=300"})
 
@@ -214,7 +272,7 @@ def list_folders():
     conn = db.get_conn()
     counts = {r["folder_id"]: r["n"] for r in conn.execute(
         "SELECT folder_id, COUNT(*) AS n FROM file_folder_links GROUP BY folder_id")}
-    pii = conn.execute("SELECT COUNT(*) FROM files WHERE json_extract(client_meta, '$.has_pii') = 1").fetchone()[0]
+    pii = conn.execute("SELECT COUNT(*) FROM files WHERE " + db.PII_SQL.format(t="")).fetchone()[0]
     out = []
     for r in conn.execute("SELECT * FROM virtual_folders ORDER BY id"):
         n = pii if r["name"] == db.SENSITIVE else counts.get(r["id"], 0)
