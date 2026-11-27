@@ -113,7 +113,28 @@ def migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE files ADD COLUMN cls_ver TEXT")  # classifier version that wrote the links
     if "ext_ver" not in cols:
         conn.execute("ALTER TABLE files ADD COLUMN ext_ver TEXT")  # extractor version (OCR) that read the file
+    if "server_pii" not in cols:
+        conn.execute("ALTER TABLE files ADD COLUMN server_pii TEXT")  # JSON list from extractors.detect_pii
     conn.commit()
+    backfill_server_pii(conn)
+
+
+def backfill_server_pii(conn: sqlite3.Connection) -> int:
+    """Rows indexed before the server-side check: run it on the stored text (a regex, fast)."""
+    from .extractors import detect_pii
+    rows = conn.execute("SELECT id, title, summary, keywords, text_excerpt FROM files WHERE server_pii IS NULL").fetchall()
+    for r in rows:
+        kws = " ".join(json.loads(r["keywords"] or "[]"))
+        found = detect_pii("\n".join([r["text_excerpt"] or "", r["title"] or "", r["summary"] or "", kws]))
+        conn.execute("UPDATE files SET server_pii=? WHERE id=?", (json.dumps(found), r["id"]))
+    conn.commit()
+    return len(rows)
+
+
+# A file is personal (the Sensitive (PII) folder) when the browser's Redact model or the
+# server-side check found personal data. The browser can add to this, never take it away.
+PII_SQL = ("(json_extract({t}client_meta, '$.has_pii') = 1 "
+           "OR ({t}server_pii IS NOT NULL AND {t}server_pii != '[]'))")
 
 
 def init_db() -> None:
@@ -151,8 +172,10 @@ def upsert_file(conn: sqlite3.Connection, rec: dict) -> int:
     keywords = json.dumps(rec.get("keywords") or [], ensure_ascii=False)
     row = conn.execute("SELECT id FROM files WHERE path=?", (rec["path"],)).fetchone()
     cols = ("name", "ext", "kind", "size", "mtime", "sha256", "title", "summary",
-            "text_excerpt", "ai_status", "ai_error", "indexed_at", "ext_ver")
+            "text_excerpt", "ai_status", "ai_error", "indexed_at", "ext_ver", "server_pii")
     vals = [rec.get(c) for c in cols]
+    if "server_pii" in rec:
+        vals[cols.index("server_pii")] = json.dumps(rec["server_pii"] or [])
     if row:
         fid = row["id"]
         conn.execute(
@@ -174,10 +197,27 @@ def delete_file(conn: sqlite3.Connection, file_id: int) -> None:
     conn.commit()
 
 
+def clear_index(conn: sqlite3.Connection) -> int:
+    """Forget every indexed file: rows, folder links, search text, vectors and the scan root.
+    Folders stay. The FTS table is dropped and rebuilt and the file is vacuumed, so the old text
+    is not left behind in free pages or the WAL. Returns how many files were removed."""
+    n = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+    conn.execute("DELETE FROM file_folder_links")
+    conn.execute("DELETE FROM files")
+    conn.execute("DROP TABLE IF EXISTS files_fts")
+    conn.execute("DELETE FROM app_meta WHERE key='scan_root'")
+    conn.commit()
+    conn.executescript(SCHEMA)          # recreates files_fts, empty
+    conn.execute("VACUUM")
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    return n
+
+
 # ---- API views ------------------------------------------------------------------
 
 def file_cards(conn: sqlite3.Connection, rows, full: bool = False) -> list[dict]:
-    """Rows of `files` -> JSON-ready dicts with folder links. `full` adds the excerpt."""
+    """Rows of `files` -> JSON-ready dicts with folder links. `full` adds the excerpt and the
+    browser's redacted excerpt (lists leave both out: they are the bulk of the payload)."""
     rows = list(rows)
     ids = [r["id"] for r in rows]
     links: dict[int, list[dict]] = {i: [] for i in ids}
@@ -191,10 +231,15 @@ def file_cards(conn: sqlite3.Connection, rows, full: bool = False) -> list[dict]
                                         "emoji": l["emoji"], "score": l["score"]})
     out = []
     for r in rows:
+        meta = json.loads(r["client_meta"] or "{}")
+        if not full:
+            meta.pop("redacted_excerpt", None)
+        server_pii = r["server_pii"] if "server_pii" in r.keys() else None
         d = {"id": r["id"], "path": r["path"], "name": r["name"], "ext": r["ext"], "kind": r["kind"],
              "size": r["size"], "mtime": r["mtime"], "title": r["title"], "summary": r["summary"],
              "keywords": json.loads(r["keywords"] or "[]"), "ai_status": r["ai_status"],
-             "ai_error": r["ai_error"], "sha256": r["sha256"], "client_meta": json.loads(r["client_meta"] or "{}"),
+             "ai_error": r["ai_error"], "sha256": r["sha256"], "client_meta": meta,
+             "server_pii": json.loads(server_pii or "[]"),
              "indexed_at": r["indexed_at"], "folders": links[r["id"]]}
         if full:
             d["text_excerpt"] = r["text_excerpt"]

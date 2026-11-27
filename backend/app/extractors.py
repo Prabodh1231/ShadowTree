@@ -75,41 +75,48 @@ def read_bytes(path: Path, limit: int) -> bytes:
         raise ExtractError(f"cannot read file: {exc}") from exc
 
 
+# PDFium is not thread safe and pypdfium2 adds no lock of its own. The scan thread (OCR of
+# scanned PDFs) and request threads (previews) both render, and two threads inside PDFium at
+# once corrupt the heap and kill the process (STATUS_HEAP_CORRUPTION, 0xC0000374). Every call
+# into PDFium goes through render_pdf_pages, which holds this lock for the whole document.
+PDFIUM_LOCK = threading.Lock()
+
+
 def render_pdf_pages(data: bytes, pages: int = 3, dpi: int = 200, max_pixels: int = 12_000_000) -> list:
     """Render the first `pages` pages of a PDF given as bytes to BGR uint8 arrays, in memory only.
     The scale is lowered per page so width x height stays under `max_pixels` (an A0 page at
-    200 dpi would be about 100 Mpx). pypdfium2 is imported lazily; nothing is written to disk."""
+    200 dpi would be about 100 Mpx). pypdfium2 is imported lazily; nothing is written to disk.
+    Thread safe: holds PDFIUM_LOCK (do not call it with the lock already held)."""
     import io
 
     import numpy as np
     import pypdfium2 as pdfium
 
-    pdf = pdfium.PdfDocument(io.BytesIO(data))
     out = []
-    try:
-        for i in range(min(pages, len(pdf))):
-            page = pdf[i]
-            try:
-                w, h = page.get_size()                  # PDF points (1/72 inch)
-                scale = dpi / 72
-                if w * h * scale * scale > max_pixels:
-                    scale = (max_pixels / (w * h)) ** 0.5
-                img = page.render(scale=scale).to_pil().convert("RGB")
-                out.append(np.asarray(img)[:, :, ::-1].copy())  # RGB -> BGR for rapidocr
-            finally:
-                page.close()
-    finally:
-        pdf.close()
+    with PDFIUM_LOCK:
+        pdf = pdfium.PdfDocument(io.BytesIO(data))
+        try:
+            for i in range(min(pages, len(pdf))):
+                page = pdf[i]
+                try:
+                    w, h = page.get_size()                  # PDF points (1/72 inch)
+                    scale = dpi / 72
+                    if w * h * scale * scale > max_pixels:
+                        scale = (max_pixels / (w * h)) ** 0.5
+                    img = page.render(scale=scale).to_pil().convert("RGB")
+                    out.append(np.asarray(img)[:, :, ::-1].copy())  # RGB -> BGR for rapidocr
+                finally:
+                    page.close()
+        finally:
+            pdf.close()
     return out
 
 
-_preview_lock = threading.Lock()   # pdfium is not thread safe, and the scan thread renders PDFs too
-
-
-def render_preview(path: Path, kind: str, size: int = 480) -> bytes | None:
+def render_preview(path: Path, kind: str, size: int = 480, limit: int | None = None) -> bytes | None:
     """A PNG of an image, or of the first page of a PDF, fitted inside `size` x `size`.
     Built in memory from a read-only open: nothing is written anywhere. None when this kind
-    has no visual preview or the file cannot be rendered."""
+    has no visual preview, the file is over `limit` bytes (it grew since the scan) or it
+    cannot be rendered."""
     import io
 
     import numpy as np
@@ -117,13 +124,14 @@ def render_preview(path: Path, kind: str, size: int = 480) -> bytes | None:
 
     try:
         with open(path, "rb") as fh:
-            data = fh.read()
+            data = fh.read() if limit is None else fh.read(limit + 1)
+        if limit is not None and len(data) > limit:
+            return None
         if kind == "image":
             with Image.open(io.BytesIO(data)) as im:
                 img = ImageOps.exif_transpose(im).convert("RGB")
         elif kind == "pdf":
-            with _preview_lock:
-                pages = render_pdf_pages(data, pages=1, dpi=72, max_pixels=4_000_000)
+            pages = render_pdf_pages(data, pages=1, dpi=72, max_pixels=4_000_000)   # takes PDFIUM_LOCK
             if not pages:
                 return None
             img = Image.fromarray(np.ascontiguousarray(pages[0][:, :, ::-1]))   # BGR -> RGB
@@ -240,6 +248,65 @@ def is_grounded(candidate: str, source: str, min_share: float = 0.9) -> bool:
         return False
     have = set(_tokens(source))
     return sum(1 for w in toks if w in have) / len(toks) >= min_share
+
+
+# ---- server-side personal-data baseline --------------------------------------------
+# Runs while indexing, on all the text that was read (not only the stored excerpt), so a file is
+# flagged even when no window ever ran the browser privacy pass, and the browser cannot clear it.
+# Only high-precision patterns, with checksums where they exist: a false hit hides a file's text
+# until it is opened in Original. Names and street addresses are left to the browser's Redact
+# model. Type names match Redact's labels so the UI can merge both lists.
+_PII_EMAIL = re.compile(r"(?<![\w.+-])[\w.+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![\w-])")
+_PII_PHONE_INTL = re.compile(r"(?<![\w+])\+\d{1,3}(?:[ .-]?\(?\d{1,5}\)?){1,5}(?![\w-])")
+_PII_PHONE_LABEL = re.compile(r"(?i)\b(?:phone|tel|telephone|mobile|cell|fax)\b\.?[\s:#-]{0,4}(\(?\d[\d ().-]{5,18}\d)")
+_PII_CARD = re.compile(r"(?<![\d-])\d(?:[ -]?\d){12,18}(?![\d-])")
+_PII_IBAN = re.compile(r"(?<![A-Z0-9])[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,3})?(?![A-Z0-9])")
+_PII_SSN = re.compile(r"(?<![\d-])(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}(?![\d-])")
+
+
+def _digits(s: str) -> str:
+    return re.sub(r"\D", "", s)
+
+
+def _luhn_ok(num: str) -> bool:
+    total, alt = 0, False
+    for ch in reversed(num):
+        d = int(ch)
+        if alt:
+            d = d * 2 - 9 if d > 4 else d * 2
+        total += d
+        alt = not alt
+    return total % 10 == 0
+
+
+def _iban_ok(s: str) -> bool:
+    s = s.replace(" ", "")
+    if not 15 <= len(s) <= 34:
+        return False
+    moved = s[4:] + s[:4]
+    return int("".join(str(int(c, 36)) for c in moved)) % 97 == 1
+
+
+def detect_pii(text: str) -> list[str]:
+    """Sorted personal-data types found in `text`: EMAIL, PHONE, CREDIT_CARD, BANK_ACCOUNT, SSN."""
+    if not text:
+        return []
+    found: set[str] = set()
+    if _PII_EMAIL.search(text):
+        found.add("EMAIL")
+    if any(8 <= len(_digits(m.group(0))) <= 15 for m in _PII_PHONE_INTL.finditer(text)) or \
+            any(7 <= len(_digits(m.group(1))) <= 15 for m in _PII_PHONE_LABEL.finditer(text)):
+        found.add("PHONE")
+    for m in _PII_CARD.finditer(text):
+        d = _digits(m.group(0))
+        if 13 <= len(d) <= 19 and len(set(d)) > 1 and _luhn_ok(d):
+            found.add("CREDIT_CARD")
+            break
+    if any(_iban_ok(m.group(0)) for m in _PII_IBAN.finditer(text)):
+        found.add("BANK_ACCOUNT")
+    if _PII_SSN.search(text):
+        found.add("SSN")
+    return sorted(found)
 
 
 def _bad_keyword(k: str) -> bool:

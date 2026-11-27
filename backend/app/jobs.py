@@ -2,10 +2,12 @@
 
 POST /scan is rejected while a job runs. A "link new folder" request that arrives while a
 job runs is queued and runs right after it (several queued folders share one job).
+POST /scan/cancel stops the running job after the file it is on; a queued folder job still runs.
 """
 from __future__ import annotations
 
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 from . import ai_cactus, db, scanner
@@ -18,6 +20,7 @@ class JobRunning(Exception):
 _lock = threading.Lock()
 _idle = threading.Event()
 _idle.set()
+_stop = threading.Event()     # set by cancel(); the scanner checks it between files
 _status: dict = {"state": "idle", "job_id": None, "kind": None, "processed": 0, "total": 0,
                  "current_file": None, "errors": [], "stats": None, "queued_job_id": None}
 _next_id = 0
@@ -56,14 +59,15 @@ def _run(kind: str, arg) -> None:
     global _pending
     try:
         while True:
-            errors: list[str] = _status["errors"]
+            with _lock:
+                errors: list[str] = _status["errors"]
             ai_cactus.reset_failures()
             try:
                 if kind == "scan":
-                    stats = scanner.scan(arg, _progress, errors)
+                    stats = scanner.scan(arg, _progress, errors, should_stop=_stop.is_set)
                 else:
-                    stats = scanner.link_new_folders(arg, _progress, errors)
-                _progress(state="done", stats=stats, current_file=None)
+                    stats = scanner.link_new_folders(arg, _progress, errors, should_stop=_stop.is_set)
+                _progress(state="cancelled" if _stop.is_set() else "done", stats=stats, current_file=None)
             except Exception as exc:
                 errors.append(f"job failed: {type(exc).__name__}: {exc}")
                 _progress(state="error", current_file=None)
@@ -74,14 +78,45 @@ def _run(kind: str, arg) -> None:
                     break
                 _new_job("reclassify")
                 _status["queued_job_id"] = None
+                _stop.clear()   # a cancel stopped the job before; the queued folder job still runs
             kind, arg = "reclassify", nxt
     finally:
         db.close_thread_conns()
         _idle.set()
 
 
+@contextmanager
+def exclusive():
+    """Run work that must not overlap a job (clearing the index). Raises JobRunning;
+    no job can start until the block ends. A folder job queued meanwhile starts right after."""
+    global _pending
+    with _lock:
+        if is_running():
+            raise JobRunning("a job is already running")
+        _idle.clear()
+    try:
+        yield
+    finally:
+        with _lock:
+            _idle.set()
+            if _pending is not None:
+                nxt, _pending = _pending, None
+                _start("reclassify", nxt)
+                _status["queued_job_id"] = None
+
+
+def cancel() -> bool:
+    """Ask the running job to stop after its current file. False when no job runs."""
+    with _lock:
+        if not is_running():
+            return False
+        _stop.set()
+        return True
+
+
 def _start(kind: str, arg) -> int:
     _idle.clear()
+    _stop.clear()
     jid = _new_job(kind)
     threading.Thread(target=_run, args=(kind, arg), name="veilfs-job", daemon=True).start()
     return jid

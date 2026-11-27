@@ -33,14 +33,12 @@ export default defineConfig({
     exclude: BROWSER_AI,
   },
   // Top-level await in the Desert Ant entries needs an esnext target.
+  // Only the app is built. The spike pages under spikes/ are dev tools: `npm run dev` still serves
+  // them, but they are not shipped in dist/ (and so not inside the desktop app).
   build: {
     target: 'esnext',
     rollupOptions: {
-      input: {
-        main: here('./index.html'),
-        spike: here('./spikes/browser-spike.html'),
-        aicheck: here('./spikes/browser-ai-check.html'),
-      },
+      input: { main: here('./index.html') },
     },
   },
   worker: {

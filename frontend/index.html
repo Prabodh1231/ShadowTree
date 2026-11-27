@@ -64,6 +64,7 @@
       <input id="root" type="text" placeholder="…or paste a folder path" spellcheck="false">
       <button id="scan-btn" class="btn btn-primary" type="submit">Index (Read-Only)</button>
       <div class="readonly" title="ShadowTree opens your files read-only. It never writes, moves or deletes them.">🔒 Read-only: your files are never modified</div>
+      <button id="clear-btn" class="btn btn-small btn-quiet" type="button" title="Delete the text, summaries and search data ShadowTree keeps. Your files are not touched.">Clear index…</button>
     </form>
 
     <div class="side-foot">
@@ -74,7 +75,10 @@
   <main class="center">
     <section id="progress" class="progress" hidden aria-live="polite">
       <div class="bar"><div id="bar-fill" class="bar-fill"></div></div>
-      <div id="progress-text" class="progress-text"></div>
+      <div class="progress-row">
+        <div id="progress-text" class="progress-text"></div>
+        <button id="stop-btn" class="btn btn-small" type="button" title="Stop after the file it is reading. Files read so far stay in the index.">Stop</button>
+      </div>
     </section>
     <div id="skipped" class="skipped" hidden></div>
     <div id="notes" class="notes"></div>
